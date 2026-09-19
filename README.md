@@ -28,6 +28,8 @@ The architecture is a modular monolith with a separate ingestion worker.
 
 ## Documentation
 
+Agent/contributor execution rules are in [AGENTS.md](./AGENTS.md).
+
 Authoritative working specifications live under [.work](./.work/README.md).
 
 Start with:
