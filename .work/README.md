@@ -33,6 +33,7 @@ Research/review files are evidence and critique, not authoritative architecture 
 ├── PRODUCT_SCOPE.md
 └── adr/
     ├── elapsed-war-day-vs-game-day.md
+    ├── collection-cadence-and-storage.md
     ├── observed-events-not-exact-events.md
     ├── objective-identity.md
     ├── historical-source-policy.md
@@ -52,7 +53,8 @@ Supporting research material:
 ├── REVIEW_SYNTHESIS.md
 ├── research/
 │   ├── OBJECTIVE_IDENTITY_RESEARCH_2026-09-19.md
-│   └── TIME_SEMANTICS_RESEARCH_2026-09-19.md
+│   ├── TIME_SEMANTICS_RESEARCH_2026-09-19.md
+│   └── COLLECTION_CADENCE_STORAGE_ANALYSIS_2026-09-19.md
 └── reviews/
     ├── architecture-review-agent-2.md
     └── architecture-ux-analysis-2026.md
@@ -164,5 +166,7 @@ The War API source-semantics gate has been materialized in `WAR_API_SEMANTICS.md
 The Objective Identity deep-research pass is integrated into `OBJECTIVE_IDENTITY.md`, `DATA_MODEL.md`, `INGESTION.md`, `METRICS.md`, `ANALYTICS.md`, `PUBLIC_API.md`, and `adr/objective-identity.md`. Production matcher thresholds remain intentionally uncommitted until calibration against a labeled real-payload corpus.
 
 The Time Semantics deep-research pass is integrated into `TIME_SEMANTICS.md`, `WAR_API_SEMANTICS.md`, `DATA_MODEL.md`, `INGESTION.md`, `HISTORICAL_DATA.md`, `METRICS.md`, `ANALYTICS.md`, `PUBLIC_API.md`, `ARCHITECTURE.md`, and `adr/elapsed-war-day-vs-game-day.md`. Canonical time semantics version is `elapsed-war-clock@1`.
+
+Collection/storage profile `chronicle-collection-v1` is accepted: war 5m, warReport 15m/map, dynamic 15m/map, maps 60m, static once per war/map, with a 30-map/shard planning baseline. Replay-critical unique raw payloads are retained as compressed content-addressed evidence; PostgreSQL stores sparse semantic history instead of duplicating every unchanged item occurrence. See `adr/collection-cadence-and-storage.md`.
 
 Items explicitly marked UNKNOWN or unresolved remain conservative implementation constraints, not invitations to guess.
