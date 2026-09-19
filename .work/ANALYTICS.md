@@ -2,7 +2,9 @@
 
 Status: **Authoritative working specification**
 
-This document defines the product-level analytical models that sit above registered metrics.
+This document defines analytical models that sit above registered metrics.
+
+These models are **secondary enrichment**. Current War, War Timeline and War Replay are the P0 product core and MUST work without War DNA, Similar Wars, War Phases, Swings, Records or historical percentile context.
 
 Every model MUST be deterministic, reproducible, versioned and coverage-aware. War-relative models additionally bind to `time_semantics_version` and `war_time_revision` from TIME_SEMANTICS.md.
 
@@ -99,7 +101,7 @@ Winner/result MUST NOT be an input for active-war similarity and MUST NOT be use
 
 ## 4. War Phases — P1 / corpus-calibrated
 
-Purpose: deterministic segmentation of the observed war timeline.
+Purpose: deterministic optional segmentation overlay for the observed War Timeline after corpus calibration.
 
 Phase classification is not the old "Turning Points" feature. It does not identify magical causal moments and does not narrate why a faction succeeds.
 
@@ -145,7 +147,7 @@ Marketing labels such as "stalemate", "breakthrough", "endgame" MAY be displayed
 
 Exact thresholds remain **PENDING CALIBRATION** against a representative Chronicle-native/golden corpus.
 
-`phase-model@1` MUST NOT be treated as launch-blocking or authoritative before that calibration corpus exists. Any earlier exploratory implementation must use an explicitly experimental/provisional model version and must not silently become the historical baseline.
+`phase-model@1` MUST NOT be treated as launch-blocking or authoritative before that calibration corpus exists. P0 Timeline MUST render without phase bands. Any earlier exploratory implementation must use an explicitly experimental/provisional model version and must not silently become the historical baseline.
 
 ## 5. Swing Analysis
 
