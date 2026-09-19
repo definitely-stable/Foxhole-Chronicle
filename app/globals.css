@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@theme {
+  /* Graphite neutral base */
+  --color-base: oklch(0.16 0.006 260);
+  --color-surface: oklch(0.19 0.007 260);
+  --color-surface-2: oklch(0.23 0.008 260);
+  --color-line: oklch(0.30 0.008 260);
+  --color-line-soft: oklch(0.26 0.008 260);
+
+  --color-ink: oklch(0.95 0.004 260);
+  --color-ink-muted: oklch(0.74 0.006 260);
+  --color-ink-faint: oklch(0.56 0.006 260);
+
+  /* Semantic faction colors */
+  --color-colonial: oklch(0.66 0.11 155);
+  --color-colonial-soft: oklch(0.66 0.11 155 / 0.16);
+  --color-warden: oklch(0.65 0.11 245);
+  --color-warden-soft: oklch(0.65 0.11 245 / 0.16);
+
+  /* Analytical accents */
+  --color-accent: oklch(0.78 0.14 85);
+  --color-danger: oklch(0.66 0.17 25);
+  --color-positive: oklch(0.72 0.13 150);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 0.625rem;
+}
+
+* {
+  border-color: var(--color-line-soft);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-base);
+  color: var(--color-ink);
+  font-feature-settings: "cv01", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular numerals for all data figures */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Subtle grid texture for the observatory backdrop */
+.observatory-grid {
+  background-image:
+    linear-gradient(to right, oklch(0.30 0.008 260 / 0.35) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.30 0.008 260 / 0.35) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black, transparent 75%);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.live-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
