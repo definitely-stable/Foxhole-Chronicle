@@ -52,6 +52,9 @@ The API MUST:
 
 - `GET /api/v1/objectives/{objective}`
 - `GET /api/v1/objectives/{objective}/history`
+- `GET /api/v1/objectives/{objective}/revisions`
+
+Objective identifiers in public routes resolve through canonical Chronicle identity/alias rules. A superseded alias SHOULD redirect or resolve to the surviving canonical objective without breaking old links.
 
 ### Records
 
@@ -100,6 +103,55 @@ Analytical responses SHOULD include:
 ```
 
 For simple list endpoints, metadata MAY be represented in headers where clearer.
+
+Objective-derived responses additionally SHOULD expose:
+
+```json
+{
+  "identity": {
+    "resolutionVersion": "objective-identity-v1",
+    "coverageRatio": 0.98,
+    "qualityClass": "complete",
+    "ambiguousObservationCount": 0,
+    "unmatchedObservationCount": 1
+  }
+}
+```
+
+These values describe Chronicle identity resolution quality; they are not source-provided confidence probabilities.
+
+## 4.1 Objective History contract
+
+`GET /api/v1/objectives/{objective}/history` SHOULD return:
+
+- immutable canonical objective ID;
+- canonical key;
+- aliases;
+- revision metadata;
+- selected war or war range;
+- normalized state/ownership intervals;
+- observed changes;
+- source coverage;
+- identity coverage;
+- active identity resolution version;
+- taxonomy/state-model version;
+- polling uncertainty boundaries.
+
+Observed change shape SHOULD use interval semantics:
+
+```json
+{
+  "changeType": "ownership_change_observed",
+  "previousObservedAt": "2026-09-19T10:01:00Z",
+  "currentObservedAt": "2026-09-19T10:02:00Z",
+  "previousOwner": "WARDENS",
+  "currentOwner": "COLONIALS"
+}
+```
+
+The API MUST NOT emit a fabricated exact `capturedAt` when the source only supports an observation interval.
+
+If identity quality is insufficient for canonical history, the API SHOULD return an explicit unavailable/degraded state rather than silently merge ambiguous observations.
 
 ## 5. Errors
 
@@ -174,7 +226,9 @@ Every CSV export MUST document:
 - source fields;
 - derived fields;
 - coverage fields;
-- metric/model versions.
+- metric/model versions;
+- identity resolution version for objective-derived datasets;
+- identity coverage for objective-derived datasets.
 
 Large bulk datasets MAY be prepared as immutable export artifacts with an export manifest.
 
@@ -242,4 +296,6 @@ Readiness MUST consider database/API health; upstream War API outage alone SHOUL
 5. Historical low-resolution data cannot masquerade as high-resolution output.
 6. CSV and JSON expose the same metric semantics.
 7. Rate limiting protects expensive analytics endpoints.
-8. No raw source redistribution bypasses DATA_LICENSING policy.
+8. Objective History never serializes polling-bounded changes as exact event timestamps.
+9. Objective-derived responses expose identity resolution version and identity coverage.
+10. Old objective aliases remain resolvable after rename/merge.
