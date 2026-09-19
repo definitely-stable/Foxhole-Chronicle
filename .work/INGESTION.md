@@ -4,7 +4,7 @@ Status: **Authoritative working specification — War API semantics verified 202
 
 This document defines current/future data collection, historical imports, retries, replay, reconciliation and raw-data retention.
 
-Official source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). The worker MUST NOT invent stronger guarantees.
+Official source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Canonical analytical clock rules are defined in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md). The worker MUST NOT invent stronger guarantees.
 
 ## 1. Source policy
 
@@ -117,7 +117,8 @@ On `304 Not Modified`:
 - update source health/freshness metadata;
 - do not create a duplicate payload;
 - do not create a duplicate normalized observation;
-- do not rerun normalization unless explicit reprocessing requests it.
+- do not rerun normalization unless explicit reprocessing requests it;
+- retain the successful validation instant so coverage logic can extend the validity of the previously accepted representation without duplicating facts.
 
 On `200`:
 
@@ -148,6 +149,48 @@ Map payloads preserve:
 `version` is a source revision counter, not a timestamp.
 
 A map-version regression is an anomaly and MUST NOT automatically emit rollback events.
+
+## 7.1 War-time anchor reconciliation
+
+War-relative analytics are derived from accepted source-time anchors, not frozen into raw observations.
+
+For each valid war-state observation compare the accepted canonical fields:
+
+- `conquest_start_at`;
+- `conquest_end_at`;
+- `resistance_start_at`.
+
+If no start exists yet:
+
+- preserve the raw observation;
+- mark the war pre-conquest;
+- do not assign elapsed-war buckets.
+
+When a valid start first appears:
+
+- set the canonical start;
+- increment/create `war_time_revision`;
+- classify/recompute eligible observations relative to that anchor;
+- initialize war-relative aggregates.
+
+If an accepted start changes:
+
+- persist the new source observation;
+- increment `war_time_revision`;
+- do not rewrite absolute observation timestamps;
+- invalidate every war-relative bucket/model for that war;
+- enqueue deterministic recomputation under the new revision.
+
+If end first appears or changes:
+
+- increment `war_time_revision`;
+- finalize/recompute conquest duration;
+- recompute final-day status and tail buckets;
+- update completed-war eligibility and dependent records/models.
+
+A change to `scheduledConquestEndTime` is preserved as source state but does not change elapsed-day mapping by itself.
+
+`dayOfWar` disagreement, jump or regression is diagnostic only and MUST NOT alter canonical war-time anchors.
 
 ## 8. Observation batches
 
@@ -345,6 +388,45 @@ Negative casualty deltas MUST NOT enter normal casualty-rate aggregates.
 
 Even though secondary Foxhole documentation describes it as unique players per map, the official README does not define global uniqueness semantics. Chronicle MUST NOT sum maps and expose the result as global unique players or faction population.
 
+## 16.4 Time/bucket reconciliation
+
+All analytical bucket assignment follows TIME_SEMANTICS.md.
+
+### Point observations
+
+A point observation belongs to a conquest bucket only when:
+
+- canonical conquest start exists;
+- `observed_at >= conquest_start_at`;
+- if conquest end exists, `observed_at < conquest_end_at`.
+
+An instant exactly on a bucket boundary belongs to the new bucket.
+
+### Observed changes
+
+For a change known only in:
+
+`(previous_observed_at, current_observed_at]`
+
+the worker computes:
+
+- earliest possible elapsed day;
+- latest possible elapsed day;
+- `bucket_assignment_status`.
+
+If the uncertainty interval spans an elapsed-day or other analytical-bucket boundary, the change is `boundary_ambiguous`.
+
+It MUST NOT be assigned to the midpoint or silently attributed to `current_observed_at`'s day as an exact event.
+
+### Cumulative counter deltas
+
+For adjacent valid counter observations:
+
+- non-negative delta within one bucket MAY contribute to that bucket;
+- a pair spanning a bucket boundary is marked boundary-ambiguous for per-bucket allocation;
+- v1 MUST NOT linearly split the delta across buckets;
+- excessive gaps reduce coverage or invalidate the pair according to metric policy.
+
 ## 17. Objective identity pipeline
 
 Identity resolution is a first-class ingestion stage defined by [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md).
@@ -434,6 +516,8 @@ Recommended product freshness states:
 
 Every live API response SHOULD expose `data_as_of` and `freshness_state`.
 
+Freshness is not the elapsed-war clock. During collector/API downtime the elapsed clock continues while freshness/coverage deteriorate.
+
 ## 21. Observability
 
 Worker MUST emit:
@@ -452,7 +536,12 @@ Worker MUST emit:
 - derived-job lag;
 - reconciliation anomalies;
 - retry/circuit state;
-- historical import counts.
+- historical import counts;
+- canonical `war_time_revision` changes;
+- `dayOfWar` regressions/cross-map disagreement diagnostics;
+- boundary-ambiguous observed-change counts;
+- boundary-ambiguous counter-delta counts;
+- time-bucket recomputation lag.
 
 ## 22. Security boundaries
 
@@ -490,3 +579,9 @@ Before backend feature work depends on ingestion:
 18. One missing dynamic observation cannot tombstone a canonical identity.
 19. Matcher v1/v2 can be replayed and diffed without destroying old evidence.
 20. Ambiguous identity observations do not silently enter objective-derived analytics.
+21. A 304 extends validation/coverage evidence without duplicating normalized facts.
+22. `dayOfWar` cannot change Chronicle elapsed-day assignment.
+23. Exact conquest-end boundaries do not create empty following elapsed days.
+24. A conquest-start correction increments `war_time_revision` and triggers war-relative recomputation without rewriting raw timestamps.
+25. Boundary-crossing observed changes remain boundary-ambiguous.
+26. Counter deltas are not silently interpolated across analytical bucket boundaries.
