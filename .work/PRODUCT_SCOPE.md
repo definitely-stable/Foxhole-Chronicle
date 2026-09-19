@@ -26,7 +26,6 @@ Core launch scope:
 - Compare
 - Records
 - Archive
-- War Phases (P0)
 
 P0 data collection MUST also preserve objective observations needed for later Objective History/Swings even if those UIs are not launch-blocking.
 
@@ -36,6 +35,7 @@ P0 data collection MUST also preserve objective observations needed for later Ob
 - War DNA
 - Day vs Day
 - Objective History
+- War Phases — corpus-calibrated, versioned model
 - Largest Swings / State Reversals
 - Shareable Insights
 - Public Data API / CSV
@@ -46,7 +46,7 @@ Priority within P1 is dependency-driven:
 2. Day vs Day
 3. War DNA
 4. Similar Wars
-5. War Phases refinement
+5. War Phases after a representative Chronicle-native/golden corpus exists
 6. Swing Analysis
 7. Shareable Insights
 8. Public bulk exports
