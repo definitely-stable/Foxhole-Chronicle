@@ -192,6 +192,7 @@ Key rules:
 4. Every derived metric/model is deterministic, reproducible and versioned.
 5. Coverage and provenance are first-class data.
 6. Historical sources may have lower resolution and MUST be labeled accordingly.
+7. Collection resolution is distinct from UI/aggregation resolution; `chronicle-collection-v1` collects war at 5m and warReport/dynamic map state at 15m.
 
 Official source semantics are fixed in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Canonical war-relative clock/bucket semantics are fixed in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md). Domain/storage rules are in [DATA_MODEL.md](./DATA_MODEL.md), [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md), and [METRICS.md](./METRICS.md).
 
@@ -261,13 +262,32 @@ Live/phase-2 Event Stream MAY use SSE if product freshness needs justify it.
 
 ## 11. Storage
 
-PostgreSQL 18 is the v1 system of record.
+PostgreSQL 18 is the v1 queryable system of record for canonical facts, provenance metadata, sparse semantic history, coverage, aggregates and model outputs.
 
 No table partitioning is required initially.
 
-Raw changed payloads SHOULD be content-addressed and retained separately from normalized analytical facts; a persistent compressed filesystem volume is the preferred initial physical store, with PostgreSQL metadata.
+Replayable source storage is split deliberately:
 
-Normalized facts, provenance, aggregates and model outputs are retained long-term.
+1. fetch/validation metadata in PostgreSQL;
+2. unique changed raw payloads in content-addressed compressed persistent storage;
+3. sparse relational item/objective evidence in PostgreSQL;
+4. derived aggregates/models in PostgreSQL.
+
+Replay-critical raw payloads SHOULD be retained long-term. Physical storage tier may change, but content identity/replayability must survive.
+
+PostgreSQL MUST NOT duplicate every unchanged map item occurrence on every snapshot merely to preserve replayability. Full matcher/parser replay reconstructs occurrences from archived raw payloads.
+
+The accepted planning baseline is 30 active maps/shard under `chronicle-collection-v1`:
+
+- war 5m;
+- warReport 15m/map;
+- dynamic/public 15m/map;
+- maps 60m;
+- static once per war/map.
+
+This yields 6,072 scheduled regular requests/day/shard before retries, but request count alone is not a DB-size forecast. Storage sizing MUST be based on measured payload sizes, change ratios and relation/index growth.
+
+See [INGESTION.md](./INGESTION.md), [DATA_MODEL.md](./DATA_MODEL.md), and [adr/collection-cadence-and-storage.md](./adr/collection-cadence-and-storage.md).
 
 ## 12. Reliability model
 
@@ -283,6 +303,9 @@ Operational SLOs SHOULD include:
 - page Web Vitals;
 - current-data lag;
 - aggregation/model lag;
+- PostgreSQL growth by relation/index;
+- compressed raw archive growth;
+- 200/304 and semantic-change ratios;
 - backup freshness;
 - restore success.
 
