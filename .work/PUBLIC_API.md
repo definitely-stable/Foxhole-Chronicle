@@ -93,6 +93,7 @@ Analytical responses SHOULD include:
     "dataAsOf": "2026-09-19T12:00:00Z",
     "freshnessState": "fresh",
     "resolution": "5m",
+    "collectionProfileVersion": "chronicle-collection-v1",
     "coverageRatio": 0.99,
     "qualityClass": "high",
     "sources": ["official-war-api"],
@@ -105,6 +106,8 @@ Analytical responses SHOULD include:
 ```
 
 For simple list endpoints, metadata MAY be represented in headers where clearer.
+
+`collectionProfileVersion` describes Chronicle's source collection cadence when that cadence materially bounds what could have been observed. It is not the same as response/downsample `resolution`.
 
 Objective-derived responses additionally SHOULD expose:
 
@@ -362,3 +365,4 @@ Readiness MUST consider database/API health; upstream War API outage alone SHOUL
 12. Day endpoints use half-open elapsed-war intervals and never expose an empty day after an exact conquest-end boundary.
 13. Partial Day-vs-Day comparison mode is explicit.
 14. Boundary-ambiguous poll-derived changes are distinguishable from exact-single-bucket changes.
+15. Observation-sensitive analytics expose `collectionProfileVersion` separately from output resolution.
