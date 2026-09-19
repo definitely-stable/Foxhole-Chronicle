@@ -118,7 +118,8 @@ On `304 Not Modified`:
 - do not create a duplicate payload;
 - do not create a duplicate normalized observation;
 - do not rerun normalization unless explicit reprocessing requests it;
-- retain the successful validation instant so coverage logic can extend the validity of the previously accepted representation without duplicating facts.
+- link the fetch to the previously accepted representation (`representation_payload_id` or equivalent);
+- retain the successful validation instant so coverage logic can extend the validity of that representation without duplicating facts.
 
 On `200`:
 
