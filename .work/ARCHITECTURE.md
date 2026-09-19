@@ -90,7 +90,7 @@ Verified platform baseline for the September 2026 bootstrap:
 - C# 14
 - EF Core 10 + Npgsql 10 hybrid data access
 - NodaTime for canonical backend time types
-- PostgreSQL 18.x with pg_stat_statements
+- PostgreSQL 18.x with pg_stat_statements + btree_gist for temporal interval constraints
 - pgBackRest for physical backup/WAL-PITR management
 - Zstandard for external raw/archive compression
 - Apache Parquet for sealed analytical exports only
@@ -165,7 +165,8 @@ Does not own:
 
 Owns:
 
-- locale-neutral public REST contract;
+- locale-neutral P0 first-party application REST contract under /api/app;
+- future selected stable public REST resources under /api/v1;
 - analytical query application services;
 - source/coverage/freshness metadata;
 - output caching;
@@ -244,8 +245,10 @@ Key rules:
 5. Coverage and provenance are first-class data.
 6. Historical sources may have lower resolution and MUST be labeled accordingly.
 7. Collection resolution is distinct from UI/aggregation resolution; `chronicle-collection-v1` collects war at 5m and warReport/dynamic map state at 15m.
+8. Replay state value is separate from replay evidence class; same-state samples support continuity but do not prove no transient state existed between polls.
+9. Replay presentation coordinates/layout are versioned presentation metadata and MUST NOT strengthen undocumented source-coordinate guarantees.
 
-Official source semantics are fixed in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Canonical war-relative clock/bucket semantics are fixed in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md). UI localization, locale routing and language-selection semantics are fixed in [LOCALIZATION.md](./LOCALIZATION.md). Domain/storage rules are in [DATA_MODEL.md](./DATA_MODEL.md), [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md), and [METRICS.md](./METRICS.md).
+Official source semantics are fixed in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Canonical war-relative clock/bucket semantics are fixed in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md). UI localization, locale routing and language-selection semantics are fixed in [LOCALIZATION.md](./LOCALIZATION.md). Domain/storage rules are in [DATA_MODEL.md](./DATA_MODEL.md), [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md), and [METRICS.md](./METRICS.md). Replay coordinate/layout rendering semantics are fixed in [MAP_PRESENTATION.md](./MAP_PRESENTATION.md).
 
 ## 7. Current and historical data
 
@@ -420,6 +423,7 @@ See [TESTING.md](./TESTING.md).
 - [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md)
 - [PUBLIC_API.md](./PUBLIC_API.md)
 - [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md)
+- [MAP_PRESENTATION.md](./MAP_PRESENTATION.md)
 - [LOCALIZATION.md](./LOCALIZATION.md)
 - [WEB_RUNTIME.md](./WEB_RUNTIME.md)
 - [PLATFORM_DEPENDENCIES.md](./PLATFORM_DEPENDENCIES.md)
