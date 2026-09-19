@@ -290,8 +290,8 @@ Mutation/admin endpoints MUST NOT share the same public CORS policy.
 
 CSV endpoints SHOULD be explicit, for example:
 
-- `GET /api/v1/wars/{war}/timeline.csv?... `
-- `GET /api/v1/wars/{war}/days.csv`
+- `GET /api/v1/wars/{chronicleWarId}/timeline.csv?... `
+- `GET /api/v1/wars/{chronicleWarId}/days.csv`
 - `GET /api/v1/objectives/{objective}/history.csv`
 - `GET /api/v1/exports/{dataset}.csv`
 
