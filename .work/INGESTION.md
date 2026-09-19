@@ -298,7 +298,7 @@ Default isolation is `READ COMMITTED` with explicit row locking/unique constrain
 
 Retry the complete transaction for classified transient failures such as PostgreSQL `40001` serialization failures and `40P01` deadlocks. A unique violation is retryable only when the specific constraint is an intentional idempotency arbiter.
 
-A connection loss during `COMMIT` is an **unknown outcome**. The worker MUST first reconcile the stable `reconciliation_operation_id`; it MUST NOT assume rollback and blindly create a new operation. PostgreSQL `pg_xact_status(xid8)` MAY supplement this recovery when the transaction XID is available.
+A connection loss during `COMMIT` is an **unknown outcome**. For raw capture, reconcile by stable `source_fetch.id` plus payload uniqueness. For canonical reconciliation, reconcile by stable `reconciliation_operation_id`. The worker MUST NOT assume rollback and blindly create a new logical identity. PostgreSQL `pg_xact_status(xid8)` MAY supplement this recovery when the transaction XID is available.
 
 Initial worker write transactions SHOULD use `SET LOCAL` timeouts as defined in IDEMPOTENCY_RECOVERY.md and calibrate them under load.
 
@@ -308,9 +308,9 @@ Source/HTTP retries remain bounded exponential backoff with jitter and preserve 
 
 Correctness MUST NOT depend on a single worker process.
 
-Use durable lease rows for work ownership and an `endpoint_cursors` row as the canonical serialization/fencing point for each semantic endpoint.
+Use `ingestion_jobs` leases for logical-job ownership, `endpoint_poll_state` for endpoint execution ownership/fencing, and `endpoint_cursors` only for accepted canonical state.
 
-The reconciliation transaction locks the endpoint cursor `FOR UPDATE` and verifies `lease_generation`.
+The reconciliation transaction locks `endpoint_poll_state` first and `endpoint_cursors` second, then verifies both current `job_lease_generation` and the endpoint `fence_token`/owner attempt.
 
 Before HTTP execution, the attempt must also acquire the semantic endpoint lease in `endpoint_poll_state`; acquisition/steal increments the endpoint `fence_token`. Renewal/release requires the same owner attempt and token.
 
