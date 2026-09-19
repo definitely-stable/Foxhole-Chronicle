@@ -204,7 +204,9 @@ The manifest SHOULD contain stable/slow-changing metadata required to render Rep
 - available replay/coverage bounds;
 - identity resolution version;
 - relevant archive/data revision;
-- map/static metadata required by the current replay renderer.
+- map/static metadata required by the current replay renderer;
+- `mapLayoutVersion` and `rendererContractVersion`;
+- per-region `regionTransformVersion` / presentation bounds required by MAP_PRESENTATION.md.
 
 For sealed wars the manifest MAY use long-lived caching.
 
@@ -259,7 +261,7 @@ SHOULD reconstruct the same Chronicle-observed state **and replayEvidenceClass**
 
 The browser MUST NOT fetch a full state snapshot for every animation frame.
 
-See [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md).
+See [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md) and [MAP_PRESENTATION.md](./MAP_PRESENTATION.md).
 
 ## 4. Envelope metadata
 
