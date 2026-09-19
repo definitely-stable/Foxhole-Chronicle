@@ -87,7 +87,7 @@ No numeric official request-rate limit is documented in the current README, so C
 
 Canonical pipeline:
 
-`schedule -> fetch -> persist fetch metadata -> deduplicate payload -> normalize -> validate -> persist source items -> source-anomaly gate -> identity candidate generation -> identity resolution -> persist canonical observations -> detect observed changes -> aggregate -> derive metrics -> analytical models -> cache invalidation -> share/export`
+`schedule -> fetch -> persist fetch metadata -> deduplicate/archive payload -> normalize -> validate -> semantic fingerprint/diff -> source-anomaly gate -> persist sparse source-item evidence -> identity candidate generation -> identity resolution -> persist canonical state evidence -> detect observed changes -> aggregate -> derive metrics -> analytical models -> cache invalidation -> share/export`
 
 Each stage MUST be replayable from a durable predecessor whenever practical.
 
