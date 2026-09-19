@@ -4,7 +4,7 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Foxhole Chronicle — War 122 Overview",
+  title: "Foxhole Chronicle — World Conquest 129 Overview",
   description:
     "A public analytics and historical archive for Foxhole World Conquest. What happened, how a war evolved, and how unusual it was.",
   applicationName: "Foxhole Chronicle",
