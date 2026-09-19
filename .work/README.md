@@ -11,6 +11,8 @@ The documents are written for both human developers and AI coding agents. They a
 3. accepted ADRs in `adr/`
 4. research/review material under `reviews/`, `RESEARCH_BRIEF.md`, and `REVIEW_SYNTHESIS.md`
 
+For official Foxhole source semantics, `WAR_API_SEMANTICS.md` is the authoritative source contract. Domain documents MUST NOT strengthen an upstream guarantee beyond it.
+
 Research/review files are evidence and critique, not authoritative architecture by themselves.
 
 ## Authoritative structure
@@ -18,6 +20,7 @@ Research/review files are evidence and critique, not authoritative architecture 
 ```text
 .work/
 ├── ARCHITECTURE.md
+├── WAR_API_SEMANTICS.md
 ├── DATA_MODEL.md
 ├── INGESTION.md
 ├── HISTORICAL_DATA.md
@@ -56,6 +59,7 @@ Supporting research material:
 The following documents are the most important **before writing the main backend**:
 
 ```text
+WAR_API_SEMANTICS.md
 DATA_MODEL.md
 INGESTION.md
 OBJECTIVE_IDENTITY.md
@@ -72,10 +76,11 @@ Specifications use RFC 2119 terminology: **MUST**, **SHOULD**, **MAY**.
 Material statements SHOULD be classified where useful as:
 
 - **VERIFIED FACT** — verified against a cited primary/official source.
+- **OBSERVED/SECONDARY** — observed or supported by a secondary source but not an official guarantee.
 - **DESIGN DECISION** — chosen architecture/product decision.
 - **ASSUMPTION** — assumption requiring validation.
 - **ESTIMATE** — sizing/capacity estimate, not an observed fact.
-- **PENDING VERIFICATION** — implementation must not assume the claim until the active research/source check resolves it.
+- **PENDING VERIFICATION** — implementation must not assume the claim until source verification resolves it.
 
 For Foxhole data semantics, latest official Siege Camp/Foxhole documentation and the official `clapfoot/warapi` repository are the primary source of truth.
 
@@ -139,8 +144,11 @@ Chronicle MUST NOT:
 - silently redefine metrics;
 - merge uncertain objective identities by guess;
 - claim causal explanations from correlation;
-- expose upstream raw data contrary to source policy.
+- expose upstream raw data contrary to source policy;
+- sum map-scoped enlistments and call them globally unique players;
+- treat a dynamic map disappearance as a proven destruction event;
+- treat map `lastUpdated` as an item-level event timestamp.
 
 ## Current status
 
-The authoritative documents are working specifications. Source-specific statements marked `PENDING VERIFICATION` must be resolved against the active deep research and primary sources before production implementation depends on them.
+The War API source-semantics gate has been materialized in `WAR_API_SEMANTICS.md`. Items explicitly marked UNKNOWN or unresolved there remain conservative implementation constraints, not invitations to guess.
