@@ -1,3 +1,5 @@
 namespace Chronicle.Core;
 
-public static class AssemblyMarker;
+public static class AssemblyMarker
+{
+}
