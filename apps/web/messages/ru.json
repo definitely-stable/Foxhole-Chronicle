@@ -1,0 +1,41 @@
+{
+  "Navigation": {
+    "currentWar": "Текущая война",
+    "wars": "Войны",
+    "regions": "Регионы",
+    "archive": "Архив"
+  },
+  "Home": {
+    "eyebrow": "Стратегическая обсерватория данных",
+    "tagline": "World Conquest — сохранённая и измеренная история.",
+    "currentWar": "Текущая война",
+    "bootstrapTitle": "Базовая реализация",
+    "bootstrapBody": "Каркас приложения готов. Следующий вертикальный срез — сбор текущей войны и исторический Timeline."
+  },
+  "CurrentWar": {
+    "eyebrow": "Текущая война",
+    "title": "Текущая война",
+    "shard": "Шард",
+    "state": "Состояние",
+    "bootstrap": "Bootstrap",
+    "body": "Это канонический shard-aware маршрут активной World Conquest."
+  },
+  "Timeline": {
+    "eyebrow": "Хронология войны",
+    "title": "War Timeline",
+    "placeholderLabel": "Каркас хронологии",
+    "placeholder": "Здесь будет единая историческая временная поверхность войны."
+  },
+  "Replay": {
+    "eyebrow": "Повтор войны",
+    "title": "War Replay",
+    "placeholderLabel": "Каркас повтора",
+    "placeholder": "Здесь будет воспроизводиться наблюдаемое историческое состояние карты."
+  },
+  "Support": {
+    "wars": "Войны",
+    "regions": "Регионы",
+    "archive": "Архив",
+    "bootstrap": "Вспомогательная P0-поверхность создана; реализация последует после основного потока данных."
+  }
+}
