@@ -193,7 +193,7 @@ Key rules:
 5. Coverage and provenance are first-class data.
 6. Historical sources may have lower resolution and MUST be labeled accordingly.
 
-See [DATA_MODEL.md](./DATA_MODEL.md), [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md), [METRICS.md](./METRICS.md).
+Official source semantics are fixed in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Domain/storage rules are in [DATA_MODEL.md](./DATA_MODEL.md), [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md), and [METRICS.md](./METRICS.md).
 
 ## 7. Current and historical data
 
@@ -326,7 +326,7 @@ Required test layers:
 
 ## 15. Authoritative design documents
 
-- [DATA_MODEL.md](./DATA_MODEL.md)
+- [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md)\n- [DATA_MODEL.md](./DATA_MODEL.md)
 - [INGESTION.md](./INGESTION.md)
 - [HISTORICAL_DATA.md](./HISTORICAL_DATA.md)
 - [METRICS.md](./METRICS.md)
