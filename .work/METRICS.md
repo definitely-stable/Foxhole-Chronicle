@@ -133,25 +133,41 @@ Unit: observed changes/hour.
 
 Minimum coverage MUST account for polling gaps and the expected interval of the active collection profile.
 
-### 3.8 regional_activity_share
+### 3.8 regional_casualties_per_hour
 
-For a chosen base activity measure:
+For one region and covered interval:
 
-`region_activity / sum(activity across eligible regions)`
+`regional_casualties_per_hour = valid_region_casualty_delta / covered_elapsed_hours`
 
-The base activity measure MUST be explicit in the metric version. There is no universal "activity" without a formula.
+Unit: casualties/hour.
 
-### 3.9 regional_concentration
+Inputs come from the region-scoped warReport casualty counters. Counter decreases follow anomaly/reset handling and MUST NOT become negative activity.
 
-Recommended v1 implementation: Herfindahl-Hirschman-style concentration over region activity shares:
+This is the preferred P0 "regional activity" measure when the UI needs a single comparable intensity series, because its meaning/unit is explicit.
 
-`HHI = sum(share_i^2)`
+### 3.9 regional_casualty_share
 
-Range: `[1/N,1]` over N eligible regions.
+For one aligned covered interval:
 
-Only compare cohorts using the same region eligibility and base activity definition.
+`regional_casualty_share = valid_region_casualty_delta / sum(valid_region_casualty_delta across eligible regions)`
 
-## 3.10 War API source constraints
+Range: `[0,1]` when the denominator is positive.
+
+The denominator MUST use an explicitly eligible region set with adequate comparable coverage. If cross-region denominator coverage is insufficient, the share is unavailable rather than silently computed from a biased subset.
+
+### 3.10 regional_casualty_concentration
+
+Recommended P0/P1 descriptive concentration metric:
+
+`HHI = sum(regional_casualty_share_i^2)`
+
+Range: `[1/N,1]` over N eligible regions when all required shares are available.
+
+This metric describes concentration of **observed casualties**, not generic strategic activity.
+
+Chronicle MAY later register other region-activity metrics, but each requires its own key/formula/version. The UI MUST NOT expose an opaque composite `regional_activity` value without such a registry entry.
+
+## 3.11 War API source constraints
 
 Metrics derived from the official War API MUST follow [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md).
 
@@ -162,7 +178,7 @@ Metrics derived from the official War API MUST follow [WAR_API_SEMANTICS.md](./W
 - objective-change metrics count Chronicle **observed changes** from valid observations; quarantined source anomalies do not count.
 - map/source `version` values are revision metadata, not elapsed time.
 
-## 3.11 Objective identity quality
+## 3.12 Objective identity quality
 
 Every metric that depends on canonical objectives MUST bind to an `identity_resolution_version`.
 
