@@ -206,7 +206,6 @@ A batch groups collection work but is **not** an atomic world snapshot.
 - `ingestion_job_id uuid NOT NULL FK`
 - `attempt_no integer NOT NULL`
 - `lease_generation bigint NOT NULL`
-- `endpoint_poll_state_id uuid NULL FK`
 - `endpoint_fence_token bigint NULL`
 - `worker_id text NOT NULL`
 - `state text NOT NULL`
@@ -219,7 +218,9 @@ A batch groups collection work but is **not** an atomic world snapshot.
 
 Unique: `(ingestion_job_id, attempt_no)`.
 
-`endpoint_poll_state_id` / `endpoint_fence_token` are populated only after the attempt acquires endpoint ownership. `raw_durable_at` records the durable checkpoint after the raw-capture transaction commits; it MUST NOT be set merely because an HTTP response was received.
+`endpoint_fence_token` is populated only after the attempt acquires endpoint ownership. The semantic endpoint row is resolved from the logical job's source/shard/endpoint/profile key; attempts do not hold a reverse FK to `endpoint_poll_state`, avoiding a cyclic FK with `endpoint_poll_state.lease_owner_attempt_id`.
+
+`raw_durable_at` records the durable checkpoint after the raw-capture transaction commits; it MUST NOT be set merely because an HTTP response was received.
 
 `endpoint_poll_state` owns scheduling/cache eligibility and the **endpoint-level execution fence** for one semantic endpoint. Job ownership and endpoint mutation ownership are separate concerns.
 
