@@ -37,19 +37,19 @@ export function parseAcceptLanguage(header: string | null): string[] {
         return null;
       }
 
-      let locale: string;
+      let canonicalLocale: string | undefined;
       try {
-        [locale] = Intl.getCanonicalLocales(rawLocale);
+        [canonicalLocale] = Intl.getCanonicalLocales(rawLocale);
       } catch {
         return null;
       }
 
-      if (!locale) {
+      if (!canonicalLocale) {
         return null;
       }
 
       return {
-        locale,
+        locale: canonicalLocale,
         quality,
         order
       };
