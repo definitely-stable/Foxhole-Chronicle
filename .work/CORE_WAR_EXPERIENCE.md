@@ -152,7 +152,10 @@ Recommended core routes:
 
 ~~~text
 /{locale}/
-    Current War
+    Current War entry / default-or-remembered shard resolution
+
+/{locale}/current/{shard}
+    Canonical Current War surface for one shard
 
 /{locale}/wars
     War selector / archive index
@@ -173,6 +176,10 @@ Recommended core routes:
 /{locale}/archive
     Historical archive/search
 ~~~
+
+The bare locale home is a convenience entry, not proof that there is one globally unique current war. It SHOULD resolve a supported default/remembered shard or present shard choice without GeoIP inference.
+
+The canonical Current War URL includes shard identity.
 
 A current-war link SHOULD resolve to the canonical Chronicle war UUID when navigating into the war workspace.
 
