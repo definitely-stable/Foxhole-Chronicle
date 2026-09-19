@@ -11,6 +11,7 @@ It complements:
 - [DATA_MODEL.md](./DATA_MODEL.md)
 - [TIME_SEMANTICS.md](./TIME_SEMANTICS.md)
 - [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md)
+- [IDEMPOTENCY_RECOVERY.md](./IDEMPOTENCY_RECOVERY.md)
 
 Research basis: [research/DATA_LIFECYCLE_ARCHIVAL_RESEARCH_2026-09-19.md](./research/DATA_LIFECYCLE_ARCHIVAL_RESEARCH_2026-09-19.md).
 
@@ -119,13 +120,29 @@ A PostgreSQL row MUST NOT commit a reference to an external payload that is not 
 Safe order:
 
 1. receive source bytes;
-2. calculate content hash;
-3. compress into temporary destination;
+2. calculate content hash over exact original bytes;
+3. compress into a temporary destination;
 4. durably flush/upload object;
-5. publish/finalize CAS object;
-6. begin PostgreSQL transaction;
-7. store payload metadata/fetch/facts/outbox jobs;
-8. commit.
+5. atomically/conditionally publish the final content-addressed object;
+6. verify stored identity/size according to the storage adapter;
+7. only then begin the PostgreSQL reconciliation transaction;
+8. store payload metadata/fetch/facts/outbox jobs;
+9. commit.
+
+For local POSIX/Linux storage, durable publication means at minimum:
+
+- temp file on the same filesystem as final object;
+- write compressed bytes;
+- flush application buffers;
+- `fsync(temp_file)`;
+- atomic publish/rename without overwriting a different object;
+- `fsync(parent_directory)` after publication.
+
+A plain write + rename is not sufficient crash-durability protocol.
+
+For S3-compatible object storage, Chronicle SHOULD use deterministic hash keys plus conditional create semantics where the selected provider supports them. Provider PUT/multipart/checksum semantics MUST be verified for that adapter. Object-store ETag MUST NOT be assumed to equal Chronicle SHA-256 or MD5.
+
+Concurrent writers for the same content hash converge on one object. If an existing object at the expected hash path fails integrity verification, Chronicle MUST raise a corruption/collision incident rather than overwrite it.
 
 A crash before database commit may leave an unreferenced CAS object. That is acceptable.
 
@@ -135,7 +152,8 @@ Unreferenced CAS objects MAY be garbage-collected only after:
 
 - a grace period;
 - database reference scan;
-- exclusion of in-flight writes.
+- exclusion of in-flight writes/sealing/reprocessing;
+- applicable retention/offsite requirements.
 
 ## 5. Inline payload protocol
 
@@ -151,7 +169,7 @@ Changing an implementation threshold between inline/external storage MUST NOT ch
 
 Chronicle v1 uses PostgreSQL transactional outbox/lease semantics for asynchronous durable work.
 
-A transaction that changes canonical state SHOULD also write all required downstream work items.
+A transaction that changes canonical state MUST write all required downstream work items atomically with that mutation.
 
 Example job kinds:
 
@@ -163,7 +181,13 @@ Example job kinds:
 - archive sealing;
 - export generation.
 
-Workers SHOULD claim jobs with PostgreSQL locking/lease semantics such as `FOR UPDATE SKIP LOCKED`.
+Workers claim jobs in a short `READ COMMITTED` transaction with row locking such as `FOR UPDATE SKIP LOCKED`, set lease owner/expiry, increment `lease_generation`, and commit before executing the handler.
+
+Delivery is **at-least-once**. A worker can crash after an effect succeeds but before the outbox row is marked completed. Therefore handlers MUST use deterministic dedup keys, naturally idempotent effects, conditional create or an equivalent effect ledger.
+
+Completion MUST verify the same lease generation. A stale worker cannot acknowledge a job after lease steal.
+
+`LISTEN/NOTIFY` MAY wake workers after commit but is not durable queue state. Workers poll the outbox on startup and periodically.
 
 Kafka/RabbitMQ/Redis queues are not required for v1.
 
@@ -317,10 +341,12 @@ Replay-critical external payloads SHOULD be replicated to independent offsite st
 
 Initial operational target:
 
-- normal replication lag < 5 minutes;
+- normal verified-replica lag < 5 minutes;
 - alert at > 15 minutes.
 
-The destination object MUST be verified against the original uncompressed content hash.
+Chronicle MUST NOT claim a <=15 minute complete recovery point unless both PostgreSQL WAL/PITR and every required external payload for that point have reached verified offsite durability.
+
+The destination object MUST be verified against the original uncompressed content hash. Upload completion and replica verification are separate states/timestamps.
 
 Provider storage SHOULD support:
 
@@ -339,6 +365,8 @@ Primary disaster recovery uses:
 - physical backup;
 - continuous WAL archive/PITR;
 - pgBackRest-managed backup repository.
+
+Operations MUST alert if the pgBackRest WAL archive stream loses continuity. In particular, an archive-push queue overflow/drop condition is a PITR continuity failure requiring remediation/new backup, not ordinary replication lag.
 
 Recommended initial schedule:
 
@@ -389,15 +417,18 @@ A valid disaster recovery requires both:
 1. PostgreSQL restored to a consistent point;
 2. all external payloads referenced by that restored database state available and verified.
 
+Chronicle SHOULD track a recovery watermark/barrier: the latest DB recovery point for which required external replay payloads are also verified in the recovery failure domain.
+
 Recovery validation MUST check:
 
 - external object existence;
 - decompression;
 - original content hash;
 - archive manifest hash;
-- analytical export hashes when required.
+- analytical export hashes when required;
+- that no restored DB reference lies beyond the selected external-payload recovery watermark.
 
-A database-only restore with missing replay evidence is degraded recovery and MUST be reported as such.
+A database-only restore with missing replay evidence is degraded recovery and MUST be reported as such. External CAS objects newer than the restored database are harmless orphans; the dangerous direction is a restored DB reference to unavailable CAS.
 
 ## 17. Small-object policy
 
@@ -492,4 +523,8 @@ The archival/recovery design is implementation-ready only when:
 12. backup and raw archive restores are tested;
 13. restore validates DB-to-CAS referential integrity;
 14. production telemetry covers growth, replication lag, backup/restore and integrity failures;
-15. partitioning/custom packfiles remain deferred until measurements justify them.
+15. partitioning/custom packfiles remain deferred until measurements justify them;
+16. external CAS publication is fault-tested for process kill, ENOSPC and concurrent same-hash writers;
+17. outbox handlers are tested for crash after effect success/before completion;
+18. sealing finalization is fenced against concurrent input/version changes;
+19. the advertised recovery point is bounded by both WAL availability and verified external payload availability.
