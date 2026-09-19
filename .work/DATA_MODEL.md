@@ -201,7 +201,31 @@ A batch groups collection work but is **not** an atomic world snapshot.
 
 Unique: `(ingestion_job_id, attempt_no)`.
 
-`endpoint_cursors` is the canonical serialization/fencing row for one semantic endpoint.
+`endpoint_poll_state` owns scheduling/cache eligibility and the **endpoint-level execution fence** for one semantic endpoint. Job ownership and endpoint mutation ownership are separate concerns.
+
+- `id uuid PK`
+- `source_id uuid NOT NULL FK`
+- `shard text NULL`
+- `endpoint_key text NOT NULL`
+- `collection_profile_version text NOT NULL`
+- `target_interval_seconds integer NOT NULL`
+- `next_due_at timestamptz NOT NULL`
+- `cache_eligible_at timestamptz NULL`
+- `etag text NULL`
+- `last_attempt_at timestamptz NULL`
+- `last_success_at timestamptz NULL`
+- `consecutive_failures integer NOT NULL DEFAULT 0`
+- `circuit_open_until timestamptz NULL`
+- `lease_owner_attempt_id uuid NULL FK`
+- `lease_until timestamptz NULL`
+- `fence_token bigint NOT NULL DEFAULT 0`
+- `updated_at timestamptz NOT NULL`
+
+Unique: `(source_id, shard, endpoint_key, collection_profile_version)` with null-safe shard treatment in the concrete migration.
+
+Claiming endpoint execution increments `fence_token` atomically and records the owning attempt. An ingestion job's `lease_generation` protects ownership of that logical job only; it MUST NOT be reused as the endpoint mutation fence.
+
+`endpoint_cursors` is the canonical serialization row for accepted state of one semantic endpoint.
 
 - `id uuid PK`
 - `source_id uuid NOT NULL FK`
@@ -214,7 +238,6 @@ Unique: `(ingestion_job_id, attempt_no)`.
 - `accepted_source_version bigint NULL`
 - `accepted_source_last_updated_at timestamptz NULL`
 - `canonical_revision bigint NOT NULL DEFAULT 0`
-- `lease_generation bigint NOT NULL DEFAULT 0`
 - `last_validated_at timestamptz NULL`
 - `last_changed_at timestamptz NULL`
 - `updated_at timestamptz NOT NULL`
@@ -227,7 +250,8 @@ Unique: `(source_id, shard, endpoint_key, collection_profile_version)` with null
 - `ingestion_attempt_id uuid NOT NULL FK`
 - `endpoint_cursor_id uuid NOT NULL FK`
 - `fetch_id uuid NULL`
-- `lease_generation bigint NOT NULL`
+- `job_lease_generation bigint NOT NULL`
+- `endpoint_fence_token bigint NOT NULL`
 - `outcome text NOT NULL`
 - `canonical_revision bigint NULL`
 - `postgres_xid xid8 NULL` — optional diagnostic only; concrete mapping may use a supported representation
@@ -262,13 +286,17 @@ The stable `operation_id`, endpoint cursor fence and unique constraints are auth
 - `payload_id uuid NULL` — physical payload received on this fetch; null for 304
 - `representation_payload_id uuid NULL` — payload representation validated by this fetch; points to prior payload on 304
 - `schema_fingerprint text NULL`
-- `lease_generation bigint NOT NULL`
+- `job_lease_generation bigint NOT NULL`
+- `endpoint_fence_token bigint NOT NULL`
 - `transport_attempt_no integer NOT NULL DEFAULT 1`
-- `reconciliation_operation_id uuid NULL FK`
 - `outcome text NOT NULL`
 - `error_code text NULL`
 
 A fetch is one HTTP interaction. A `304` MUST NOT create a duplicate normalized observation, but SHOULD reference the previously accepted representation through `representation_payload_id` so coverage can use the validation instant. Request/capture timestamps are evidence, not idempotency keys.
+
+A successful HTTP response that Chronicle intends to preserve crosses the **raw-durable boundary** when its `source_fetches` evidence and exact `source_payloads` reference/bytes have committed in a short raw-capture transaction. Canonical normalization/reconciliation happens in a later short transaction. This prevents a Worker crash after receiving a transient response from erasing the only Chronicle copy of that source state.
+
+The relationship is one-way: a fetch MAY participate in multiple reconciliation/reprocessing operations over time. `reconciliation_operations.fetch_id` owns that linkage; `source_fetches` MUST NOT hold a back-reference to one reconciliation operation.
 
 ### 4.5 Raw payloads
 
@@ -378,7 +406,9 @@ The official README does not document casualty/enlistment monotonicity guarantee
 
 Recommended uniqueness:
 
-`(war_id, region_id, map_kind, content_hash, normalizer_version)`
+`(source_fetch_id, normalizer_version, semantic_fingerprint_version)`
+
+`content_hash` identifies exact payload bytes, not a temporal observation. A repeated state sequence such as `A -> B -> A` MUST create three temporal observations even though the first and third observations may reference the same deduplicated payload/hash. Sequential unchanged validations such as `A -> A` do not require a duplicate normalized observation.
 
 A source map `version` is preserved but is not assumed globally unique across wars/maps.
 
@@ -449,9 +479,11 @@ Fields:
 
 Recommended uniqueness:
 
-`(map_observation_id, raw_item_hash, evidence_reason)`
+`(map_observation_id, source_item_kind, source_array_ordinal, evidence_reason)`
 
-`source_array_ordinal` is forensic evidence only and MUST NOT participate in identity.
+When `source_array_ordinal` is unavailable, the parser MUST assign another deterministic payload-local occurrence discriminator so two byte/field-identical occurrences in one immutable payload cannot collapse into one relational evidence row.
+
+`source_array_ordinal` is payload-local occurrence evidence only and MUST NOT participate in canonical objective matching across observations. Source occurrence identity and canonical objective identity are separate concepts.
 
 An unchanged item present in another valid snapshot MUST NOT create a new row solely because another poll occurred. Its continued state/coverage is represented through valid map snapshot/304 coverage evidence.
 
@@ -948,7 +980,10 @@ Initial B-tree indexes SHOULD cover:
 - `ingestion_jobs (state, next_eligible_at)`
 - `ingestion_jobs (source_id, shard, endpoint_key, scheduled_for)`
 - `ingestion_attempts (ingestion_job_id, attempt_no)`
+- `endpoint_poll_state (source_id, shard, endpoint_key, collection_profile_version)`
+- `endpoint_poll_state (next_due_at)`
 - `endpoint_cursors (source_id, shard, endpoint_key, collection_profile_version)`
+- `reconciliation_operations (fetch_id, created_at DESC)`
 - `reconciliation_operations (ingestion_attempt_id, created_at DESC)`
 - `outbox_jobs (state, available_at, priority DESC)`
 - `outbox_jobs (job_kind, dedup_key)`
