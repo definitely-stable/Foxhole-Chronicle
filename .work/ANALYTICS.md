@@ -6,6 +6,8 @@ This document defines the product-level analytical models that sit above registe
 
 Every model MUST be deterministic, reproducible, versioned and coverage-aware.
 
+Models that consume canonical objective history MUST also be identity-version-aware: their input fingerprint includes the active `identity_resolution_version` and objective identity coverage.
+
 ## 1. Day vs Day
 
 Purpose: compare the same elapsed war day across wars.
@@ -165,22 +167,34 @@ Results MUST include polling coverage and must not pretend objective changes occ
 
 ## 6. Objective History
 
+Objective History is the canonical consumer of Chronicle-owned objective identity.
+
 Canonical route:
 
 `/objectives/{objectiveKey}`
 
 Features:
 
-- objective identity/revision metadata;
+- immutable canonical objective ID;
+- current canonical key plus historical aliases;
+- objective revision timeline;
 - war selector;
 - ownership/state intervals;
-- observed captures/recaptures;
+- observed captures/recaptures only when transition rules support those labels;
+- generic observed state changes otherwise;
 - change counts;
 - faction ownership duration;
 - source coverage;
+- identity coverage;
+- active identity resolution version;
+- polling uncertainty intervals;
 - links into region/war/day analytics.
 
 Identity rules are defined in OBJECTIVE_IDENTITY.md.
+
+An unresolved/ambiguous identity MUST NOT be silently folded into canonical Objective History.
+
+A matcher reprocessing run may supersede the active resolution only after its diff is accepted. Historical source evidence remains immutable.
 
 ## 7. Records
 
@@ -242,6 +256,8 @@ A model recomputes when:
 
 Input fingerprints make recomputation targeted.
 
+When objective identity mapping changes, recomputation MUST be scoped to affected objectives/wars/time ranges where feasible. Merge/split/reassignment decisions invalidate objective state intervals first, then only analytics that depend on those intervals.
+
 ## 11. UX language
 
 Allowed:
@@ -267,6 +283,7 @@ No analytical feature ships unless:
 - model is documented;
 - model/version is stored;
 - inputs are source-traceable;
+- objective-dependent inputs are identity-resolution-traceable;
 - coverage threshold is enforced;
 - incomplete data has explicit behavior;
 - golden fixtures exist;
