@@ -310,7 +310,7 @@ Default isolation is `READ COMMITTED` with explicit row locking/unique constrain
 
 Retry the complete transaction for classified transient failures such as PostgreSQL `40001` serialization failures and `40P01` deadlocks. A unique violation is retryable only when the specific constraint is an intentional idempotency arbiter.
 
-A connection loss during `COMMIT` is an **unknown outcome**. For raw capture, reconcile by stable `source_fetch.id` plus payload uniqueness. For canonical reconciliation, reconcile by stable `reconciliation_operation_id`. The worker MUST NOT assume rollback and blindly create a new logical identity. PostgreSQL `pg_xact_status(xid8)` MAY supplement this recovery when the transaction XID is available.
+A connection loss during `COMMIT` is an **unknown outcome**. For raw capture, reconcile by stable `source_fetch.id` plus payload uniqueness. For canonical reconciliation, reconcile by the deterministic `operation_key` in the reconciliation ledger (and its existing physical operation_id when present). The worker MUST NOT assume rollback and blindly create a new logical identity. PostgreSQL `pg_xact_status(xid8)` MAY supplement this recovery when the transaction XID is available.
 
 Initial worker write transactions SHOULD use `SET LOCAL` timeouts as defined in IDEMPOTENCY_RECOVERY.md and calibrate them under load.
 
