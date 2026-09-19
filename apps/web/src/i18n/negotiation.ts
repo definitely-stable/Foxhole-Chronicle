@@ -33,12 +33,23 @@ export function parseAcceptLanguage(header: string | null): string[] {
         ? Number.parseFloat(qualityParameter.trim().slice(2))
         : 1;
 
-      if (!Number.isFinite(quality) || quality <= 0) {
+      if (!Number.isFinite(quality) || quality <= 0 || quality > 1) {
+        return null;
+      }
+
+      let locale: string;
+      try {
+        [locale] = Intl.getCanonicalLocales(rawLocale);
+      } catch {
+        return null;
+      }
+
+      if (!locale) {
         return null;
       }
 
       return {
-        locale: rawLocale,
+        locale,
         quality,
         order
       };
