@@ -1,6 +1,6 @@
 # Foxhole Chronicle — Data Model
 
-Status: **Authoritative working specification — War API, Objective Identity and Time Semantics integrated 2026-09-19**
+Status: **Authoritative working specification — War API, Objective Identity, Time Semantics and collection/storage profile integrated 2026-09-19**
 
 This document defines the logical data model for Foxhole Chronicle. Official runtime source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md).
 
@@ -170,6 +170,9 @@ A batch groups collection work but is **not** an atomic world snapshot.
 - `shard text NULL`
 - `endpoint_key text NOT NULL`
 - `map_name text NULL`
+- `collection_profile_version text NOT NULL`
+- `target_interval_seconds integer NULL`
+- `scheduled_for timestamptz NULL`
 - `request_uri_redacted text NOT NULL`
 - `requested_at timestamptz NOT NULL`
 - `completed_at timestamptz NULL`
@@ -197,7 +200,7 @@ A fetch is one HTTP interaction. A `304` MUST NOT create a duplicate normalized 
 - `content_hash char(64) NOT NULL`
 - `encoding text NOT NULL`
 - `compression text NULL`
-- `payload jsonb/binary reference`
+- `storage_ref text NOT NULL`
 - `first_seen_at timestamptz NOT NULL`
 - `last_seen_at timestamptz NOT NULL`
 - `size_bytes bigint NOT NULL`
@@ -205,6 +208,8 @@ A fetch is one HTTP interaction. A `304` MUST NOT create a duplicate normalized 
 Unique: `(source_id, content_hash)`.
 
 ETag is metadata/transport validation, not payload identity.
+
+Replay-critical unique payloads are retained long-term in content-addressed compressed storage. PostgreSQL stores metadata/identity, not the default full payload body.
 
 ## 5. Official source observations
 
@@ -274,6 +279,8 @@ The official README does not document casualty/enlistment monotonicity guarantee
 - `source_map_last_updated_at timestamptz NULL`
 - `scorched_victory_towns integer NULL`
 - `content_hash char(64) NOT NULL`
+- `semantic_fingerprint char(64) NOT NULL`
+- `semantic_fingerprint_version text NOT NULL`
 - `normalizer_version text NOT NULL`
 - `validation_state text NOT NULL`
 - `quality_flags jsonb NOT NULL DEFAULT '{}'`
@@ -292,16 +299,31 @@ A source map `version` is preserved but is not assumed globally unique across wa
 
 Canonical identity rows are durable. Matcher upgrades MUST NOT rewrite raw evidence or physically delete superseded canonical identities.
 
-### 6.2 Source item observations
+### 6.2 Source item evidence
 
-`source_item_observations` stores one raw/normalized source item occurrence before canonical resolution:
+`source_item_observations` is retained as the table name for compatibility, but it is a **sparse materialized evidence index**, not a complete expansion of every item occurrence in every snapshot.
+
+The complete immutable occurrence evidence is the archived raw payload referenced by `map_observations`.
+
+Persist a relational row when an item occurrence is needed to anchor:
+
+- first-seen state;
+- material semantic state/identity change;
+- reappearance;
+- ambiguity/unmatched resolution;
+- manual review;
+- matcher/reprocessing decision evidence.
+
+Fields:
 
 - `id uuid PK`
 - `map_observation_id uuid NOT NULL FK`
+- `source_payload_id uuid NOT NULL FK`
 - `war_id uuid NOT NULL FK`
 - `region_id uuid NOT NULL FK`
 - `source_map_name text NOT NULL`
 - `source_item_kind text NOT NULL`
+- `evidence_reason text NOT NULL`
 - `source_array_ordinal integer NULL`
 - `icon_type_raw integer NULL`
 - `team_id_raw text NULL`
@@ -315,11 +337,15 @@ Canonical identity rows are durable. Matcher upgrades MUST NOT rewrite raw evide
 - `normalized_family text NULL`
 - `created_at timestamptz NOT NULL`
 
-Unique:
+Recommended uniqueness:
 
-`(map_observation_id, raw_item_hash)`
+`(map_observation_id, raw_item_hash, evidence_reason)`
 
 `source_array_ordinal` is forensic evidence only and MUST NOT participate in identity.
+
+An unchanged item present in another valid snapshot MUST NOT create a new row solely because another poll occurred. Its continued state/coverage is represented through valid map snapshot/304 coverage evidence.
+
+Full matcher replay reconstructs item occurrences from archived raw payloads.
 
 ### 6.3 Identity match runs, candidates and decisions
 
@@ -403,6 +429,8 @@ Decision values include `accepted_auto`, `accepted_manual`, `ambiguous`, `unmatc
 
 Unknown icon codes and flag bits MUST survive losslessly.
 
+`objective_observations` is also sparse canonical evidence: it is not required on every poll when the accepted objective state is unchanged. State continuity/coverage may be extended by valid snapshot/304 evidence.
+
 ### 6.5 Objective state intervals
 
 `objective_state_intervals`
@@ -467,6 +495,8 @@ Quarantined map observations MUST NOT be used as normal event bounds.
 - `actual_samples bigint NULL`
 - `coverage_ratio numeric NULL`
 - `resolution_class text NOT NULL`
+- `collection_profile_version text NULL`
+- `expected_interval_seconds integer NULL`
 - `time_alignment_class text NULL`
 - `quality_class text NOT NULL`
 - `recorded_since_label text NULL`
@@ -700,6 +730,7 @@ Initial B-tree indexes SHOULD cover:
 - `region_observations (war_id, region_id, captured_at)`
 - `map_observations (war_id, region_id, map_kind, captured_at)`
 - `source_item_observations (war_id, region_id, normalized_family)`
+- `source_item_observations (source_payload_id, evidence_reason)`
 - `source_item_observations (map_observation_id, raw_item_hash)`
 - `identity_candidates (source_item_observation_id, score DESC)`
 - `identity_match_decisions (source_item_observation_id, effective_resolution_version)`
@@ -718,7 +749,7 @@ BRIN MAY be added for very large append-mostly timestamp columns after measured 
 
 Normalized facts, aggregates, provenance and analytical outputs SHOULD be retained indefinitely unless legal/source policy requires otherwise.
 
-Raw source payload retention is source-specific and defined in INGESTION.md and DATA_LICENSING.md.
+Replay-critical unique raw source payloads are retained long-term according to INGESTION.md; physical storage tier may change without changing payload identity.
 
 ## 15. Migration rules
 
@@ -748,3 +779,7 @@ Every migration MUST be tested against a production-like PostgreSQL container an
 16. No analytical result hides inadequate source or identity coverage.
 17. No historical import erases original provenance.
 18. No share/export silently changes semantics after an algorithm/version or war-time-revision change.
+19. Collection profile/version is persisted with fetch/coverage evidence.
+20. Raw `content_hash` and semantic snapshot fingerprint are distinct identities.
+21. Full raw snapshot evidence is replayable without requiring one PostgreSQL row per unchanged source item occurrence.
+22. Relational source-item/objective observations are sparse semantic evidence, not polling-frequency duplicates.
