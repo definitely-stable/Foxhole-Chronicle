@@ -24,6 +24,7 @@ Research/review files are evidence and critique, not authoritative architecture 
 ├── TIME_SEMANTICS.md
 ├── DATA_MODEL.md
 ├── INGESTION.md
+├── DATA_LIFECYCLE.md
 ├── HISTORICAL_DATA.md
 ├── METRICS.md
 ├── ANALYTICS.md
@@ -34,6 +35,7 @@ Research/review files are evidence and critique, not authoritative architecture 
 └── adr/
     ├── elapsed-war-day-vs-game-day.md
     ├── collection-cadence-and-storage.md
+    ├── data-lifecycle-and-recovery.md
     ├── observed-events-not-exact-events.md
     ├── objective-identity.md
     ├── historical-source-policy.md
@@ -54,7 +56,8 @@ Supporting research material:
 ├── research/
 │   ├── OBJECTIVE_IDENTITY_RESEARCH_2026-09-19.md
 │   ├── TIME_SEMANTICS_RESEARCH_2026-09-19.md
-│   └── COLLECTION_CADENCE_STORAGE_ANALYSIS_2026-09-19.md
+│   ├── COLLECTION_CADENCE_STORAGE_ANALYSIS_2026-09-19.md
+│   └── DATA_LIFECYCLE_ARCHIVAL_RESEARCH_2026-09-19.md
 └── reviews/
     ├── architecture-review-agent-2.md
     └── architecture-ux-analysis-2026.md
@@ -69,6 +72,7 @@ WAR_API_SEMANTICS.md
 TIME_SEMANTICS.md
 DATA_MODEL.md
 INGESTION.md
+DATA_LIFECYCLE.md
 OBJECTIVE_IDENTITY.md
 METRICS.md
 DATA_LICENSING.md
@@ -167,6 +171,8 @@ The Objective Identity deep-research pass is integrated into `OBJECTIVE_IDENTITY
 
 The Time Semantics deep-research pass is integrated into `TIME_SEMANTICS.md`, `WAR_API_SEMANTICS.md`, `DATA_MODEL.md`, `INGESTION.md`, `HISTORICAL_DATA.md`, `METRICS.md`, `ANALYTICS.md`, `PUBLIC_API.md`, `ARCHITECTURE.md`, and `adr/elapsed-war-day-vs-game-day.md`. Canonical time semantics version is `elapsed-war-clock@1`.
 
-Collection/storage profile `chronicle-collection-v1` is accepted: war 5m, warReport 15m/map, dynamic 15m/map, maps 60m, static once per war/map, with a 30-map/shard planning baseline. Replay-critical unique raw payloads are retained as compressed content-addressed evidence; PostgreSQL stores sparse semantic history instead of duplicating every unchanged item occurrence. See `adr/collection-cadence-and-storage.md`.
+Collection/storage profile `chronicle-collection-v1` is accepted: war 5m, warReport 15m/map, dynamic 15m/map, maps 60m, static once per war/map, with a 30-map/shard planning baseline. PostgreSQL stores sparse semantic history instead of duplicating every unchanged item occurrence. Exact raw evidence uses hybrid storage: small payloads may be inline; larger dynamic/static payloads use Zstd-compressed CAS. See `adr/collection-cadence-and-storage.md`.
+
+The data lifecycle/recovery pass is integrated in `DATA_LIFECYCLE.md` and `adr/data-lifecycle-and-recovery.md`: PostgreSQL transactional outbox, war sealing/archive revisions, Parquet/Zstd sealed projections, pgBackRest + WAL/PITR, offsite raw replication and restore verification. Generic high-resolution analytical output is now `15m` under `chronicle-collection-v1`; `5m` is metric-specific only when underlying evidence supports it.
 
 Items explicitly marked UNKNOWN or unresolved remain conservative implementation constraints, not invitations to guess.
