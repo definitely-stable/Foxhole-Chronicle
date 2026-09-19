@@ -4,7 +4,7 @@ Status: **Authoritative working specification**
 
 This document defines the product-level analytical models that sit above registered metrics.
 
-Every model MUST be deterministic, reproducible, versioned and coverage-aware.
+Every model MUST be deterministic, reproducible, versioned and coverage-aware. War-relative models additionally bind to `time_semantics_version` and `war_time_revision` from TIME_SEMANTICS.md.
 
 Models that consume canonical objective history MUST also be identity-version-aware: their input fingerprint includes the active `identity_resolution_version` and objective identity coverage.
 
@@ -18,27 +18,31 @@ Canonical route:
 
 Comparison endpoint is defined in PUBLIC_API.md.
 
-Day N is the interval:
+Day N is the half-open interval:
 
 `[war_start + (N-1)*24h, war_start + N*24h)`
 
-This is an elapsed-war analytical day, not a UTC calendar day.
+This is an elapsed-war analytical day, not a UTC calendar day and not upstream `dayOfWar`.
+
+A completed conquest ending exactly on the upper boundary does not create a new empty day.
 
 For an incomplete current day, comparisons MUST use either:
 
-- like-for-like elapsed fraction; or
-- clearly label the current day as partial and compare only the covered interval.
+- `partial_as_is`: clearly label the active day partial and avoid presenting full-day totals as like-for-like; or
+- `like_for_like_fraction`: cut eligible historical Day N data at the same elapsed fraction.
 
-The UI MUST show which mode is used.
+The UI/API MUST show which mode is used. Daily-only historical data cannot participate in fractional cut comparisons unless its source semantics actually support the cut.
 
 Primary comparable outputs:
 
-- casualties during the day;
-- cumulative casualties at boundary;
-- casualty rate;
-- observed objective changes;
+- observed casualty delta over covered intervals;
+- cumulative casualties near a requested boundary with supporting observation time;
+- casualty rate over covered elapsed time;
+- exact-bucket observed objective changes;
+- boundary-ambiguous observed changes shown separately;
 - active regions;
-- regional concentration.
+- regional concentration;
+- day status/span fraction and source coverage.
 
 ## 2. War DNA
 
@@ -251,10 +255,15 @@ A model recomputes when:
 - source facts change;
 - input metric version changes;
 - objective identity mapping changes;
+- accepted conquest start/end/resistance anchors change;
+- `war_time_revision` changes;
+- time semantics version changes;
 - ruleset cohort changes;
 - model version changes.
 
 Input fingerprints make recomputation targeted.
+
+A conquest-start correction invalidates all war-relative analytical windows for that war. An end-time correction primarily invalidates final/tail windows, duration records and completion-dependent models.
 
 When objective identity mapping changes, recomputation MUST be scoped to affected objectives/wars/time ranges where feasible. Merge/split/reassignment decisions invalidate objective state intervals first, then only analytics that depend on those intervals.
 
@@ -286,5 +295,7 @@ No analytical feature ships unless:
 - objective-dependent inputs are identity-resolution-traceable;
 - coverage threshold is enforced;
 - incomplete data has explicit behavior;
+- war-relative inputs identify time semantics version and war time revision;
+- boundary-ambiguous changes/deltas are handled explicitly rather than midpoint-assigned;
 - golden fixtures exist;
 - UI explanation is understandable without reading source code.
