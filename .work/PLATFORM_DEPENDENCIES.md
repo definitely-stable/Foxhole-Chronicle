@@ -120,7 +120,25 @@ The project MUST NOT hide these PostgreSQL-specific operations behind a generic 
 
 Dapper is NOT part of the initial baseline. It MAY be introduced later only if measured/query-complexity evidence shows a clear maintenance advantage over EF Core + Npgsql.
 
-### 3.2 Async-only direction
+### 3.2 PostgreSQL extensions used by schema invariants
+
+Approved PostgreSQL extensions:
+
+- `pg_stat_statements` — query diagnostics;
+- `btree_gist` — required by the PostgreSQL 18 temporal non-overlap constraint used for objective-state interval chronology when equality columns (UUID/text) participate alongside the range.
+
+`btree_gist` is a PostgreSQL-supplied extension, not an external service. It MUST be created explicitly by migrations/bootstrap before the temporal constraint that depends on it.
+
+Chronicle uses PostgreSQL 18 `UNIQUE NULLS NOT DISTINCT` for nullable semantic endpoint keys and `UNIQUE (..., range WITHOUT OVERLAPS)` for accepted objective-state chronology.
+
+Do not replace these invariants with application-only checks.
+
+Official references:
+
+- https://www.postgresql.org/docs/18/indexes-unique.html
+- https://www.postgresql.org/docs/18/sql-createtable.html
+
+### 3.3 Async-only direction
 
 Application database I/O SHOULD be asynchronous. Npgsql 10 has explicitly signaled movement away from synchronous I/O in future major versions. New Chronicle code MUST NOT depend on synchronous database APIs.
 
