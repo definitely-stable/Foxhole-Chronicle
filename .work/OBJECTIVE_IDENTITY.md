@@ -778,11 +778,13 @@ Canonical route:
 
 Old aliases SHOULD redirect to the surviving canonical route after rename/merge.
 
-Public API SHOULD provide:
+The P0 first-party application API SHOULD provide:
 
-- `GET /api/v1/objectives/{objective}`
-- `GET /api/v1/objectives/{objective}/history`
-- CSV equivalent for historical intervals/changes.
+- `GET /api/app/objectives/{objective}`
+- `GET /api/app/objectives/{objective}/history`
+- CSV equivalent for historical intervals/changes where implemented.
+
+Selected equivalent resources may be published later under the stable /api/v1 contract.
 
 API must never serialize polling-bounded changes as exact capture timestamps.
 
