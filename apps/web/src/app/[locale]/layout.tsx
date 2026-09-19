@@ -1,6 +1,7 @@
 import type {Metadata} from "next";
+import type {ReactNode} from "react";
 import {hasLocale, NextIntlClientProvider} from "next-intl";
-import {setRequestLocale} from "next-intl/server";
+import {getTranslations, setRequestLocale} from "next-intl/server";
 import {NuqsAdapter} from "nuqs/adapters/next/app";
 import {notFound} from "next/navigation";
 import {Link} from "@/i18n/navigation";
@@ -8,7 +9,7 @@ import {routing} from "@/i18n/routing";
 import "./globals.css";
 
 type Props = Readonly<{
-  children: React.ReactNode;
+  children: ReactNode;
   params: Promise<{locale: string}>;
 }>;
 
@@ -33,6 +34,7 @@ export default async function LocaleLayout({children, params}: Props) {
   }
 
   setRequestLocale(locale);
+  const t = await getTranslations("Navigation");
 
   return (
     <html lang={locale}>
@@ -45,10 +47,10 @@ export default async function LocaleLayout({children, params}: Props) {
                 <span className="brand-muted">CHRONICLE</span>
               </Link>
               <nav aria-label="Primary navigation">
-                <Link href="/">Current War</Link>
-                <Link href="/wars">Wars</Link>
-                <Link href="/regions">Regions</Link>
-                <Link href="/archive">Archive</Link>
+                <Link href="/">{t("currentWar")}</Link>
+                <Link href="/wars">{t("wars")}</Link>
+                <Link href="/regions">{t("regions")}</Link>
+                <Link href="/archive">{t("archive")}</Link>
               </nav>
             </header>
             {children}
