@@ -12,6 +12,8 @@ Chronicle uses Next.js 16 App Router with React Server Components as the default
 
 Client Components are used only for real client interactivity such as:
 
+- Timeline inspection/scrubbing;
+- Replay map/playback controls;
 - chart interaction;
 - local table controls;
 - language selector interaction;
@@ -20,6 +22,8 @@ Client Components are used only for real client interactivity such as:
 - URL-state controls that require browser history updates.
 
 Fetching canonical Chronicle data SHOULD happen server-side by default.
+
+Current War and the canonical selected-war workspace SHOULD reuse the same Timeline rendering/view-model path. Current War supplies the active shard/war context and defaults the inspection cursor to the latest accepted state; it is not a separate frontend data architecture.
 
 ## 2. Cache Components
 
@@ -63,6 +67,16 @@ Derived/model surfaces MUST still include the metric/model/data revision in thei
 ### Archive/records/compare
 
 These may use medium/long caching with tags or bounded lifetimes based on their dependencies.
+
+### Replay
+
+Replay uses different cache classes:
+
+- manifest: long-lived for sealed wars, revision-aware for active wars;
+- state-at-time: query/revision-aware;
+- change ranges: query/range/revision-aware and cacheable aggressively for sealed history.
+
+Playback MUST NOT bypass the cache model by requesting a full state snapshot per animation frame.
 
 ### Source status/freshness
 
@@ -118,6 +132,7 @@ nuqs is the approved parser/state library for query-string view state.
 
 Examples:
 
+- canonical inspection instant `at`;
 - metric;
 - resolution;
 - from/to range;
@@ -138,6 +153,49 @@ Rules:
 - public analytical query state SHOULD use strict parsing where invalid values would change analytical meaning.
 
 Locale switching MUST preserve compatible pathname/query state.
+
+### 7.1 Shared Timeline / Replay cursor
+
+War Timeline and War Replay share one canonical URL-restorable inspection instant:
+
+~~~text
+?at=<UTC ISO-8601 instant>
+~~~
+
+The client may display the cursor as Day N + elapsed time, but the URL stores the absolute instant so source corrections to conquest-start interpretation do not move an old share link to different evidence.
+
+Current War normally omits `at`; its cursor is conceptually pinned to the latest accepted current state.
+
+Timeline inspection, Replay scrubbing and Day navigation MUST update the same semantic cursor rather than keep unrelated local times.
+
+### 7.2 Replay client state
+
+Replay client state is split into:
+
+- manifest/static replay metadata;
+- baseline state at a seek point;
+- an ordered nearby/range change buffer;
+- ephemeral playback clock/UI state.
+
+Preferred algorithm:
+
+~~~text
+seek
+  -> load/reuse manifest
+  -> fetch baseline state at selected instant
+  -> fetch a change window
+
+play
+  -> advance local clock
+  -> apply buffered accepted changes
+  -> prefetch another change window when needed
+~~~
+
+A high-frame-rate animation loop MUST NOT cause high-frame-rate API snapshot requests.
+
+A future wide-screen split mode may render Timeline and Replay concurrently, but both surfaces MUST use the same cursor and transport contracts.
+
+See [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md).
 
 ## 8. Client state
 
@@ -197,9 +255,9 @@ TanStack Table owns headless state/model logic.
 
 Table pagination/filtering MUST distinguish client-local operations from server-side query operations. Large Archive/Records datasets paginate/filter server-side.
 
-## 12. Charts
+## 12. Timeline and charts
 
-Apache ECharts remains the chart engine.
+Apache ECharts remains the chart engine for Timeline/chart surfaces where it provides the required interaction/performance.
 
 Charts are isolated Client Components.
 
@@ -208,6 +266,10 @@ Keep the data transformation/metric definition server-side or in shared determin
 Do not make chart configuration the source of analytical truth.
 
 Visible labels/tooltips/legend text are localized; metric IDs and series identifiers are stable/invariant.
+
+Timeline layers share one x-axis and inspection marker. Observed-change UI MUST preserve interval uncertainty rather than force every change into an exact point.
+
+Replay map rendering may use a separate dedicated map/canvas/SVG layer chosen during implementation; ECharts MUST NOT become the source of replay state semantics.
 
 ## 13. Security headers and CSP
 

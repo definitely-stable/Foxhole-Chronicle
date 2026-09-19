@@ -2,24 +2,45 @@
 
 This directory contains the authoritative working specifications for Foxhole Chronicle.
 
-The documents are written for both human developers and AI coding agents. They are expected to evolve through reviewed ADRs and source verification, not through undocumented implementation drift.
+The documents are written for both human developers and AI coding agents. They are expected to evolve through reviewed design decisions and source verification, not through undocumented implementation drift.
 
 ## Authority order
 
 1. `ARCHITECTURE.md`
 2. the domain-specific specification for the topic
 3. accepted ADRs in `adr/`
-4. research/review material under `reviews/`, `RESEARCH_BRIEF.md`, and `REVIEW_SYNTHESIS.md`
+4. research/review material under `research/`, `reviews/`, `RESEARCH_BRIEF.md`, and `REVIEW_SYNTHESIS.md`
 
 For official Foxhole source semantics, `WAR_API_SEMANTICS.md` is the authoritative source contract. Domain documents MUST NOT strengthen an upstream guarantee beyond it.
 
 Research/review files are evidence and critique, not authoritative architecture by themselves.
 
+## Product direction
+
+Foxhole Chronicle is a public historical observatory for World Conquest, not a tactical live-map replacement and not a general-purpose Foxhole tool hub.
+
+The product is organized around one temporal war-history model and three primary experiences:
+
+1. **Current War** — a concise, beautiful view of the current war now;
+2. **War Timeline** — the central product: the whole war through time;
+3. **War Replay** — move backward/forward through Chronicle's observed historical map/objective state.
+
+Supporting surfaces such as Archive, Regions and Sources/Coverage exist to deepen those three core experiences.
+
+Compare, Records, Daily Chronicle, Objective History, War DNA, Similar Wars, War Phases, Swing Analysis and other analytical modules are P1/P2 depth and MUST NOT delay the P0 core.
+
+See:
+
+- `CORE_WAR_EXPERIENCE.md`
+- `PRODUCT_SCOPE.md`
+
 ## Authoritative structure
 
-```text
+~~~text
 .work/
 ├── ARCHITECTURE.md
+├── CORE_WAR_EXPERIENCE.md
+├── PRODUCT_SCOPE.md
 ├── WAR_API_SEMANTICS.md
 ├── TIME_SEMANTICS.md
 ├── DATA_MODEL.md
@@ -31,27 +52,19 @@ Research/review files are evidence and critique, not authoritative architecture 
 ├── ANALYTICS.md
 ├── OBJECTIVE_IDENTITY.md
 ├── PUBLIC_API.md
+├── LOCALIZATION.md
+├── WEB_RUNTIME.md
+├── PLATFORM_DEPENDENCIES.md
+├── OBSERVABILITY.md
+├── SECURITY.md
+├── TESTING.md
 ├── DATA_LICENSING.md
-├── PRODUCT_SCOPE.md
 └── adr/
-    ├── elapsed-war-day-vs-game-day.md
-    ├── collection-cadence-and-storage.md
-    ├── data-lifecycle-and-recovery.md
-    ├── idempotency-transaction-crash-recovery.md
-    ├── observed-events-not-exact-events.md
-    ├── objective-identity.md
-    ├── historical-source-policy.md
-    ├── ruleset-epochs.md
-    ├── metric-versioning.md
-    ├── war-dna.md
-    ├── war-similarity.md
-    ├── war-phases.md
-    └── public-data-licensing.md
-```
+~~~
 
-Supporting research material:
+Supporting research material includes:
 
-```text
+~~~text
 .work/
 ├── RESEARCH_BRIEF.md
 ├── REVIEW_SYNTHESIS.md
@@ -59,17 +72,19 @@ Supporting research material:
 │   ├── OBJECTIVE_IDENTITY_RESEARCH_2026-09-19.md
 │   ├── TIME_SEMANTICS_RESEARCH_2026-09-19.md
 │   ├── COLLECTION_CADENCE_STORAGE_ANALYSIS_2026-09-19.md
-│   └── DATA_LIFECYCLE_ARCHIVAL_RESEARCH_2026-09-19.md
+│   ├── DATA_LIFECYCLE_ARCHIVAL_RESEARCH_2026-09-19.md
+│   ├── LOCALIZATION_I18N_RESEARCH_2026-09-19.md
+│   └── PLATFORM_DEPENDENCY_RESEARCH_2026-09-19.md
 └── reviews/
-    ├── architecture-review-agent-2.md
-    └── architecture-ux-analysis-2026.md
-```
+~~~
 
-## Pre-backend architecture gate
+## Existing pre-backend architecture gate
 
-The following documents are the most important **before writing the main backend**:
+The repository already defines a pre-backend consistency gate in `ARCHITECTURE.md`.
 
-```text
+The most important source/data-semantics documents before encoding irreversible backend assumptions remain:
+
+~~~text
 WAR_API_SEMANTICS.md
 TIME_SEMANTICS.md
 DATA_MODEL.md
@@ -79,9 +94,27 @@ IDEMPOTENCY_RECOVERY.md
 OBJECTIVE_IDENTITY.md
 METRICS.md
 DATA_LICENSING.md
-```
+~~~
 
-Core backend/domain implementation MUST NOT begin by inventing contradictory semantics outside these files.
+This index does not add a new documentation CI/gate policy.
+
+## Core product implementation order
+
+The P0 vertical path is intentionally product-first:
+
+~~~text
+War API
+  -> durable source observations
+  -> current war identity/state
+  -> Timeline foundation
+  -> objective historical state
+  -> Replay projection
+  -> unified Current War / Timeline / Replay web experience
+~~~
+
+Do not implement Compare/Records/DNA/Phases first and postpone the product's central Timeline/Replay experience.
+
+See `CORE_WAR_EXPERIENCE.md` for the detailed sequence and acceptance criteria.
 
 ## Documentation rules
 
@@ -96,60 +129,15 @@ Material statements SHOULD be classified where useful as:
 - **ESTIMATE** — sizing/capacity estimate, not an observed fact.
 - **PENDING VERIFICATION** — implementation must not assume the claim until source verification resolves it.
 
-For Foxhole data semantics, latest official Siege Camp/Foxhole documentation and the official `clapfoot/warapi` repository are the primary source of truth.
+For Foxhole data semantics, current official Siege Camp/Foxhole documentation and the official War API repository are the primary source of truth.
 
-FoxholeStats and FoxholeHub are historical/bootstrap candidates only and MUST NOT silently override official semantics or become runtime hard dependencies.
-
-## Product direction
-
-Foxhole Chronicle is a public historical and analytical World Conquest platform, not a map-first tactical replacement.
-
-Core product:
-
-- Overview
-- War Analytics
-- Daily Chronicle
-- Regions
-- Compare
-- Records
-- Archive
-- War Phases
-
-Extended analytical features:
-
-- Similar Wars
-- War DNA
-- Day vs Day
-- Objective History
-- Largest Swings / State Reversals
-- Shareable Insights
-- Public Data API / CSV
-- Population Lab where legitimate compatible historical data exists
-
-Phase 2:
-
-- Event Stream
-- Watch Mode
-
-Explicit non-goals for v1:
-
-- opaque/causal "Turning Points"
-- winner/outcome prediction
-- accounts / Discord
-- player profiles
-- comments
-- AI/LLM summaries
-- native mobile app
-- hidden/private intelligence
-- gameplay automation
-
-Deterministic War Phases and descriptive Swing Analysis are allowed because their formulas, evidence, versions and coverage are explicit.
+Community historical sources MUST NOT silently override official semantics or become runtime hard dependencies.
 
 ## Data honesty rules
 
-Chronicle MUST preserve this semantic chain:
+Chronicle preserves the semantic chain:
 
-`source -> fetch -> observation -> normalized fact -> observed change -> derived metric -> analytical model/result -> share/export`
+`source -> fetch -> raw durable evidence -> observation -> normalized fact -> observed change -> derived metric -> analytical model/result -> share/export`
 
 Chronicle MUST NOT:
 
@@ -164,20 +152,88 @@ Chronicle MUST NOT:
 - expose upstream raw data contrary to source policy;
 - sum map-scoped enlistments and call them globally unique players;
 - treat a dynamic map disappearance as a proven destruction event;
-- treat map `lastUpdated` as an item-level event timestamp.
+- treat map `lastUpdated` as an item-level event timestamp;
+- show Replay as omniscient exact history when Chronicle only has bounded observations.
 
-## Current status
+Replay therefore distinguishes confirmed observed state, transition uncertainty and insufficient coverage.
 
-The War API source-semantics gate has been materialized in `WAR_API_SEMANTICS.md`.
+## Current architecture status
 
-The Objective Identity deep-research pass is integrated into `OBJECTIVE_IDENTITY.md`, `DATA_MODEL.md`, `INGESTION.md`, `METRICS.md`, `ANALYTICS.md`, `PUBLIC_API.md`, and `adr/objective-identity.md`. Production matcher thresholds remain intentionally uncommitted until calibration against a labeled real-payload corpus.
+### Source and identity semantics
 
-The Time Semantics deep-research pass is integrated into `TIME_SEMANTICS.md`, `WAR_API_SEMANTICS.md`, `DATA_MODEL.md`, `INGESTION.md`, `HISTORICAL_DATA.md`, `METRICS.md`, `ANALYTICS.md`, `PUBLIC_API.md`, `ARCHITECTURE.md`, and `adr/elapsed-war-day-vs-game-day.md`. Canonical time semantics version is `elapsed-war-clock@1`.
+The War API source-semantics contract is materialized in `WAR_API_SEMANTICS.md`.
 
-Collection/storage profile `chronicle-collection-v1` is accepted: war 5m, warReport 15m/map, dynamic 15m/map, maps 60m, static once per war/map, with a 30-map/shard planning baseline. PostgreSQL stores sparse semantic history instead of duplicating every unchanged item occurrence. Exact raw evidence uses hybrid storage: small payloads may be inline; larger dynamic/static payloads use Zstd-compressed CAS. See `adr/collection-cadence-and-storage.md`.
+Objective identity research is integrated into `OBJECTIVE_IDENTITY.md`, `DATA_MODEL.md`, `INGESTION.md`, `METRICS.md`, `ANALYTICS.md` and `PUBLIC_API.md`. Production matcher thresholds remain intentionally uncommitted until calibration against a labeled real-payload corpus.
 
-The data lifecycle/recovery pass is integrated in `DATA_LIFECYCLE.md` and `adr/data-lifecycle-and-recovery.md`: PostgreSQL transactional outbox, war sealing/archive revisions, Parquet/Zstd sealed projections, pgBackRest + WAL/PITR, offsite raw replication and restore verification. Generic high-resolution analytical output is now `15m` under `chronicle-collection-v1`; `5m` is metric-specific only when underlying evidence supports it.
+### Time semantics
 
-The idempotency/transaction/crash-recovery pass is integrated in `IDEMPOTENCY_RECOVERY.md` and `adr/idempotency-transaction-crash-recovery.md`: logical jobs are separated from attempts/fetches; endpoint lease generations fence stale workers; reconciliation uses short explicit PostgreSQL transactions; unknown COMMIT is reconciled by stable operation identity; outbox is explicitly at-least-once with idempotent effects; POSIX/object-store CAS publication, sealing and PITR+CAS recovery now have formal crash semantics and fault-injection gates.
+Canonical time semantics are defined in `TIME_SEMANTICS.md`.
+
+Version:
+
+`elapsed-war-clock@1`
+
+Timeline/Replay share an absolute UTC `at` inspection cursor; elapsed Day/time is derived from the currently accepted war-time anchors.
+
+### Collection and storage
+
+Collection profile `chronicle-collection-v1`:
+
+- war — 5m;
+- warReport — 15m/map;
+- dynamic/public — 15m/map;
+- maps — 60m;
+- static — once per war/map.
+
+PostgreSQL stores sparse semantic history rather than duplicating every unchanged item occurrence. Exact raw evidence uses hybrid inline + Zstd-compressed CAS storage.
+
+### Durability / execution correctness
+
+Logical ingestion job ownership and endpoint mutation ownership are separate:
+
+- `ingestion_jobs.lease_generation` protects logical job ownership;
+- `endpoint_poll_state.fence_token` independently fences stale endpoint mutators.
+
+Received 200-response evidence crosses the raw-durable boundary before canonical reconciliation. Unknown COMMIT outcomes are reconciled by stable logical identities rather than blindly replayed as new operations.
+
+### Platform baseline
+
+The implementation baseline now includes:
+
+- Next.js 16 / React 19 / TypeScript;
+- next-intl;
+- openapi-typescript + openapi-fetch;
+- nuqs;
+- ECharts;
+- .NET 10 / C# 14;
+- EF Core 10 + Npgsql 10;
+- NodaTime + TimeProvider;
+- PostgreSQL 18 + pg_stat_statements;
+- OpenTelemetry / OTLP;
+- Testcontainers, Playwright and the testing stack documented in `TESTING.md`.
+
+See `PLATFORM_DEPENDENCIES.md`, `WEB_RUNTIME.md`, `OBSERVABILITY.md`, `SECURITY.md`, and `TESTING.md`.
+
+### Localization
+
+Launch UI locales:
+
+- en;
+- ru;
+- zh-Hans;
+- fr;
+- pt-BR.
+
+UI routes are locale-prefixed; the machine API remains locale-neutral.
+
+See `LOCALIZATION.md`.
+
+### Core war experience
+
+Current War, War Timeline and War Replay are now the explicit product core.
+
+Replay is a read projection over the same canonical history as Timeline; no replay-only source-of-truth store is introduced.
+
+Detailed semantics/API/UI/acceptance criteria are in `CORE_WAR_EXPERIENCE.md`.
 
 Items explicitly marked UNKNOWN or unresolved remain conservative implementation constraints, not invitations to guess.

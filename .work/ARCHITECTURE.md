@@ -8,24 +8,33 @@ Normative terms **MUST**, **SHOULD**, and **MAY** follow RFC 2119 semantics.
 
 ## 1. Product
 
-Foxhole Chronicle is a public historical and analytical World Conquest platform.
+Foxhole Chronicle is a public historical observatory for Foxhole World Conquest.
 
-It is:
+Its core product is one temporal war-history model exposed through three primary experiences:
+
+1. **Current War** — the current end of the observed war history;
+2. **War Timeline** — the central product surface and canonical temporal representation of one war;
+3. **War Replay** — the spatial representation of a selected historical point.
+
+Supporting modules such as Archive, Regions, Sources/Coverage, Compare, Records and analytical models exist to deepen those experiences. They are not equal product centers in P0.
+
+Chronicle is:
 
 - a long-lived public archive;
-- a time-series analytics product;
-- a comparative research tool;
-- a source-transparent data product.
+- a time-series historical product;
+- a source-transparent data product;
+- a platform for reproducible historical analysis.
 
 It is not:
 
 - a map-first tactical replacement for FoxholeStats;
+- a general-purpose Foxhole tool hub;
 - a player tracking/profile system;
 - a hidden-intelligence collector;
 - a winner/outcome prediction system;
 - an AI narrative engine.
 
-See [PRODUCT_SCOPE.md](./PRODUCT_SCOPE.md).
+See [PRODUCT_SCOPE.md](./PRODUCT_SCOPE.md) and [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md).
 
 ## 2. Architecture style
 
@@ -212,6 +221,18 @@ The canonical chain is:
 
 `source -> fetch -> raw durable evidence -> observation -> normalized fact -> observed change -> derived metric -> analytical model/result -> share/export`
 
+The three core surfaces consume the same canonical history:
+
+~~~text
+canonical observations/state intervals/changes
+        |
+        +-> Current War
+        +-> War Timeline
+        +-> War Replay
+~~~
+
+No replay-only scrape, replay-only source truth or tactical-map database is introduced.
+
 This separation is mandatory.
 
 Key rules:
@@ -236,9 +257,11 @@ Historical import automation remains blocked until [DATA_LICENSING.md](./DATA_LI
 
 See [HISTORICAL_DATA.md](./HISTORICAL_DATA.md) and [INGESTION.md](./INGESTION.md).
 
-## 8. Analytics
+## 8. Core experience and analytics
 
-Core derived analytics include:
+Current War, War Timeline and War Replay are product surfaces over canonical data; they are not analytical models.
+
+Derived analytics include:
 
 - Daily Chronicle;
 - War Pace;
@@ -258,7 +281,9 @@ No model may predict the winner/outcome.
 
 No model may claim causality from temporal correlation alone.
 
-See [ANALYTICS.md](./ANALYTICS.md).
+War Phases, War DNA, Similar Wars and other models MUST NOT be required for the P0 Current War/Timeline/Replay experience.
+
+See [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md) and [ANALYTICS.md](./ANALYTICS.md).
 
 ## 9. API
 
@@ -394,6 +419,7 @@ See [TESTING.md](./TESTING.md).
 - [ANALYTICS.md](./ANALYTICS.md)
 - [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md)
 - [PUBLIC_API.md](./PUBLIC_API.md)
+- [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md)
 - [LOCALIZATION.md](./LOCALIZATION.md)
 - [WEB_RUNTIME.md](./WEB_RUNTIME.md)
 - [PLATFORM_DEPENDENCIES.md](./PLATFORM_DEPENDENCIES.md)

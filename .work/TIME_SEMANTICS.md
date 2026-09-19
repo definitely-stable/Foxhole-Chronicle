@@ -75,6 +75,22 @@ Maintenance, API outage, collector outage or lack of state changes do not pause 
 
 Local timezone and DST have no effect.
 
+### 3.1 UI inspection / replay cursor
+
+Timeline and Replay use an absolute UTC instant as the canonical shareable inspection cursor.
+
+Recommended UI query parameter:
+
+`at=<ISO-8601 UTC instant>`
+
+The UI derives elapsed-war duration/day from the currently accepted conquest-start anchor.
+
+This is deliberate: if a later valid source correction changes `conquest_start_at`, the displayed Day N/time for an old link may change, but the absolute `at` link still points to the same source-evidence instant.
+
+An elapsed-second offset MAY be used internally for rendering/playback math, but it SHOULD NOT be the sole durable/shareable identity of a historical evidence point.
+
+Current War normally uses the latest accepted state and does not need an explicit `at` value.
+
 ## 4. Canonical conquest interval
 
 When only start is known:

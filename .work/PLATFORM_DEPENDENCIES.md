@@ -62,6 +62,7 @@ Browser OpenTelemetry instrumentation is NOT a v1 baseline. OpenTelemetry JavaSc
 - @tanstack/react-virtual — add only after profiling demonstrates a need for row/column virtualization;
 - TanStack Query — retain the existing rule: use only for client-live or mutation-oriented surfaces that cannot be expressed cleanly with RSC/server fetch + URL state;
 - @next/bundle-analyzer — development-only if the selected bundler path requires it and built-in analysis is insufficient.
+- Replay renderer/map library — NOT selected by default. Start with the simplest renderer that satisfies the historical non-geographic Foxhole map, objective markers, pan/zoom, uncertainty encoding and playback performance. Adopt a dedicated map/canvas library only after a prototype proves it improves maintainability/performance without pulling Chronicle toward tactical-map scope.
 
 ### 2.3 Do not add in v1 without new evidence
 
@@ -72,6 +73,7 @@ Browser OpenTelemetry instrumentation is NOT a v1 baseline. OpenTelemetry JavaSc
 - AG Grid;
 - request-time translation SDKs;
 - large client-side date/time libraries for canonical time logic.
+- Leaflet/MapLibre/PixiJS or another replay-map engine as an unproven baseline dependency.
 
 The normal web data path is:
 

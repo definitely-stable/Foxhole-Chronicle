@@ -62,11 +62,15 @@ See [PLATFORM_DEPENDENCIES.md](./PLATFORM_DEPENDENCIES.md) and [WEB_RUNTIME.md](
 
 ## 2. Core endpoints
 
-### Current
+### Current War
 
 - `GET /api/v1/shards/{shard}/current`
 - `GET /api/v1/status`
 - `GET /api/v1/sources`
+
+The shard current response SHOULD identify the canonical Chronicle war UUID so the UI can move from Current War into the canonical Timeline/Replay workspace without relying on unqualified war number.
+
+Current War is a projection of the same canonical history used by Timeline and Replay. It MUST NOT maintain a separate live-only truth model.
 
 A future aggregate `GET /api/v1/current` MAY return a collection of current wars across shards, but it MUST NOT imply one globally unique current war.
 
@@ -76,6 +80,9 @@ Canonical machine resource identity uses immutable Chronicle war UUID:
 
 - `GET /api/v1/wars/{chronicleWarId}`
 - `GET /api/v1/wars/{chronicleWarId}/timeline`
+- `GET /api/v1/wars/{chronicleWarId}/replay/manifest`
+- `GET /api/v1/wars/{chronicleWarId}/replay/state?at={utcInstant}`
+- `GET /api/v1/wars/{chronicleWarId}/replay/changes?from={utcInstant}&to={utcInstant}&after={cursor}&limit={n}`
 - `GET /api/v1/wars/{chronicleWarId}/days/{day}` — `{day}` is Chronicle 1-based elapsed war day
 - `GET /api/v1/wars/{chronicleWarId}/regions`
 - `GET /api/v1/wars/{chronicleWarId}/regions/{region}`
@@ -134,6 +141,75 @@ Under `chronicle-collection-v1`, ordinary warReport/dynamic-derived high resolut
 A finer resolution such as `5m` MAY exist only for a metric/dataset whose actual supporting observations permit it. Chronicle MUST NOT upsample 15m evidence and label it 5m data.
 
 A requested resolution MAY be rejected/downgraded if source/collection/historical coverage cannot support it. The response MUST state effective resolution and collection profile.
+
+Timeline is the central war-history query surface. Observed changes returned for Timeline MUST retain `previousObservedAt` / `currentObservedAt` uncertainty semantics rather than expose a fabricated exact event timestamp.
+
+## 3.1 Replay contract
+
+Replay is an observed-history projection over the same canonical data as Timeline.
+
+### Manifest
+
+`GET /api/v1/wars/{chronicleWarId}/replay/manifest`
+
+The manifest SHOULD contain stable/slow-changing metadata required to render Replay efficiently:
+
+- war identity and time bounds;
+- region identities;
+- objective identities/positions needed for the active war/map identity revision;
+- available replay/coverage bounds;
+- identity resolution version;
+- relevant archive/data revision;
+- map/static metadata required by the current replay renderer.
+
+For sealed wars the manifest MAY use long-lived caching.
+
+### State at selected instant
+
+`GET /api/v1/wars/{chronicleWarId}/replay/state?at={utcInstant}`
+
+`at` is an absolute UTC instant. The UI derives elapsed Day N/time from canonical war-time semantics.
+
+Each replay item SHOULD include:
+
+- canonical objective/region identity;
+- position;
+- observed owner/state where supported;
+- `replayStateClass`;
+- supporting/bounding observations;
+- coverage/quality;
+- identity resolution version;
+- applicable data/time revision metadata.
+
+Baseline `replayStateClass` values:
+
+- `confirmed_observed`;
+- `transition_uncertain`;
+- `no_coverage`.
+
+If Chronicle knows only that a state changed in `(previousObservedAt, currentObservedAt]`, a selected instant inside that unresolved transition window MUST NOT be assigned an interpolated exact state.
+
+### Replay change range
+
+`GET /api/v1/wars/{chronicleWarId}/replay/changes?from={utcInstant}&to={utcInstant}&after={cursor}&limit={n}`
+
+This returns ordered accepted observed-change records for client playback.
+
+Every record preserves its observation interval; ordering for deterministic transport/playback MUST NOT be misrepresented as exact in-game event ordering when uncertainty windows overlap.
+
+The endpoint uses cursor pagination for large ranges.
+
+### Client reconstruction invariant
+
+For a supported point/range, a direct replay state query and:
+
+`baseline replay state + ordered accepted replay changes`
+
+SHOULD reconstruct the same Chronicle-observed state under the documented coverage/uncertainty semantics.
+
+The browser MUST NOT fetch a full state snapshot for every animation frame.
+
+See [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md).
 
 ## 4. Envelope metadata
 
@@ -429,3 +505,8 @@ Readiness MUST consider database/API health; upstream War API outage alone SHOUL
 15. Observation-sensitive analytics expose `collectionProfileVersion` separately from output resolution.
 16. Generic timeline resolution cannot claim finer granularity than the supporting collection/source evidence.
 17. Sealed-war bulk artifacts expose archive revision and content hash.
+18. Replay manifest/state/changes use the same canonical history as Timeline.
+19. Replay state distinguishes confirmed observed, transition uncertain and no-coverage states.
+20. Replay never emits a fabricated exact transition timestamp.
+21. A direct replay-state query agrees with baseline+change reconstruction under documented semantics.
+22. Current War exposes enough canonical identity to navigate into the same war Timeline/Replay workspace.

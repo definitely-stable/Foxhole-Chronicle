@@ -80,7 +80,9 @@ Policies MUST be endpoint-aware.
 Examples:
 
 - cheap cached reads may allow higher rates;
-- expensive compare/large timeline/export endpoints need stricter concurrency/rate limits;
+- expensive Timeline range queries need stricter concurrency/rate limits;
+- Replay state seeks/change-range queries need bounded range/page limits;
+- Compare/export endpoints, when introduced, need stricter concurrency/rate limits;
 - streaming endpoints, if introduced, use separate timeout/rate semantics.
 
 Avoid unbounded rate-limit partition creation from attacker-controlled arbitrary keys.
@@ -93,8 +95,10 @@ Chronicle SHOULD set explicit limits for:
 
 - query-string length;
 - page sizes;
-- compare-war count;
-- timeline range/resolution combinations;
+- compare-war count when Compare is introduced;
+- Timeline range/resolution combinations;
+- Replay change-range duration/page size;
+- Replay manifest/state response size;
 - response/export size where appropriate;
 - upstream response body size;
 - decompression limits.

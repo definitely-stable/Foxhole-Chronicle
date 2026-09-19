@@ -637,6 +637,41 @@ Chronicle MUST NOT assign an exact in-game event timestamp when the source only 
 
 Quarantined map observations MUST NOT be used as normal event bounds.
 
+### 6.7 Replay read model
+
+War Replay is a read projection over existing canonical history. v1 MUST NOT introduce a second replay truth store.
+
+Replay uses:
+
+- objective identities/revisions for canonical identity/static context;
+- objective_observations for accepted observed states/positions;
+- objective_state_intervals for sparse state continuity;
+- observed_changes for bounded transition intervals;
+- coverage_segments for confidence/availability;
+- war/map observations and raw evidence for traceability/reprocessing.
+
+Baseline replay state classification for selected instant `at`:
+
+- `confirmed_observed`: Chronicle has accepted supporting state under the active coverage semantics at that instant;
+- `transition_uncertain`: a known state-change interval has `previous_observed_at < at < current_observed_at`, so the exact transition point is not known;
+- `no_coverage`: no sufficient accepted evidence supports a replay state.
+
+At exactly `previous_observed_at`, the previous state is an actual observation. At exactly `current_observed_at`, the current state is an actual observation. The open interior between different-state endpoints is the transition-uncertain window.
+
+This classification MUST NOT imply that no hidden A -> B -> A transition occurred between two same-state polls; it expresses Chronicle's accepted observed-history/coverage model, not omniscient game truth.
+
+The replay API SHOULD compute baseline state from canonical intervals/changes first.
+
+Chronicle MUST NOT pre-materialize a full map snapshot for every poll solely for Replay. If profiling later shows replay-state seeks are too expensive, a sparse checkpoint/read-model table MAY be added by ADR. Any checkpoint remains rebuildable from canonical observations/state intervals/changes and MUST carry source/data/identity/time revision metadata.
+
+Recommended additional replay-query indexes SHOULD be validated by EXPLAIN/pg_stat_statements before adoption. Likely candidates include:
+
+- `objective_state_intervals (war_id, first_observed_at, next_state_first_observed_at)`;
+- `observed_changes (war_id, previous_observed_at, current_observed_at)`;
+- `objective_observations (war_id, observed_at, objective_id)`.
+
+Replay data semantics are defined in [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md).
+
 ## 7. Coverage
 
 `coverage_segments`
@@ -989,6 +1024,7 @@ Initial B-tree indexes SHOULD cover:
 - `objective_state_intervals (objective_id, war_id, first_observed_at)`
 - `observed_changes (war_id, current_observed_at)`
 - `observed_changes (objective_id, current_observed_at)`
+- replay-specific interval indexes only after measured query plans justify them
 - `war_time_buckets (war_id, bucket_width, bucket_start)`
 - `region_time_buckets (war_id, region_id, bucket_width, bucket_start)`
 - `source_fetches (source_id, shard, endpoint_key, requested_at DESC)`
