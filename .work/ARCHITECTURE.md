@@ -73,11 +73,14 @@ Working baseline, pending final version verification from official project docum
 - ASP.NET Core / .NET 10 LTS
 - C# 14
 - PostgreSQL 18.x
+- pgBackRest for physical backup/WAL-PITR management
+- Zstandard for external raw/archive compression
+- Apache Parquet for sealed analytical exports only
 - Caddy
 - Docker Compose
 - OpenTelemetry
 
-Version assertions MUST be pinned by the final research pass before production bootstrap.
+Version assertions MUST be pinned by the final research pass before production bootstrap. Backup/archive tooling versions MUST also be compatibility-tested against the selected PostgreSQL/runtime image.
 
 ## 4. Repository structure
 
