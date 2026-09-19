@@ -19,6 +19,7 @@ FoxholeStats-style live maps already solve a different problem. Chronicle focuse
 
 Core launch scope:
 
+- five launch UI locales: English (`en`), Russian (`ru`), Simplified Chinese (`zh-Hans`), French (`fr`), Brazilian Portuguese (`pt-BR`);
 - Overview
 - War Analytics
 - Daily Chronicle
@@ -88,23 +89,27 @@ Deterministic War Phases and descriptive Swing Analysis are allowed because thei
 
 ## 7. Main routes
 
-- `/` — Overview
-- `/war/{war}`
-- `/war/{war}/day/{day}`
-- `/war/{war}/dna`
-- `/war/{war}/phases`
-- `/war/{war}/swings`
-- `/war/{war}/similar`
-- `/regions`
-- `/regions/{region}`
-- `/compare`
-- `/objectives/{objective}`
-- `/records`
-- `/archive`
-- `/population` — historical Population Lab when source policy/data permits
-- `/data`
-- `/api/docs`
-- `/share/{shareId}`
+Public UI routes are locale-prefixed. The bare `/` resolves/redirects to a supported locale according to [LOCALIZATION.md](./LOCALIZATION.md).
+
+- `/{locale}/` — Overview
+- `/{locale}/war/{war}`
+- `/{locale}/war/{war}/day/{day}`
+- `/{locale}/war/{war}/dna`
+- `/{locale}/war/{war}/phases`
+- `/{locale}/war/{war}/swings`
+- `/{locale}/war/{war}/similar`
+- `/{locale}/regions`
+- `/{locale}/regions/{region}`
+- `/{locale}/compare`
+- `/{locale}/objectives/{objective}`
+- `/{locale}/records`
+- `/{locale}/archive`
+- `/{locale}/population` — historical Population Lab when source policy/data permits
+- `/{locale}/data`
+- `/{locale}/api/docs`
+- `/{locale}/share/{shareId}`
+
+The machine API remains under unlocalized `/api/v1/*`.
 
 ## 8. Overview
 
@@ -172,7 +177,8 @@ Principles:
 - no decorative 3D charts/gauges;
 - motion only for state continuity;
 - accessible color-independent encoding;
-- responsive re-composition rather than desktop shrink.
+- responsive re-composition rather than desktop shrink;
+- localization-safe layouts: no fixed-width assumptions for translated labels, correct CJK glyph coverage, and language-independent chart/data identifiers.
 
 Concrete visual references are intentionally out of scope for this phase.
 
