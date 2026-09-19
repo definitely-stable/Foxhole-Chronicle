@@ -43,11 +43,30 @@ Integration tests cover:
 - fencing;
 - concurrent claims;
 - raw-capture/reconciliation transactions;
+- endpoint semantic-key uniqueness with NULLS NOT DISTINCT;
+- one-attempt/one-fetch uniqueness;
+- source occurrence multiplicity when raw field content is identical;
+- objective-state temporal non-overlap / WITHOUT OVERLAPS constraints;
+- deterministic reconciliation operation_key recovery;
 - outbox claims;
 - pg_stat_statements/bootstrap extension configuration where practical;
 - PostgreSQL-specific query translations used by Chronicle.
 
 EF InMemory and SQLite MUST NOT substitute for PostgreSQL correctness tests.
+
+## 3.1 Objective identity calibration gate
+
+Before production auto-matching is enabled, tests MUST include a labeled real-payload calibration corpus covering:
+
+- repeated observations of the same objective;
+- same-family nearby negative candidates;
+- static/dynamic offsets;
+- coordinate drift;
+- ambiguous best-vs-second-best cases;
+- reappearance after absence;
+- A -> B -> A state history.
+
+The selected matcher thresholds/version MUST have frozen golden expectations. Production Replay objective identity MUST NOT be validated only against synthetic fixtures.
 
 ## 4. Crash/recovery tests
 
@@ -57,7 +76,8 @@ The recovery suite covers explicit process/fault windows including:
 - crash after HTTP response before raw durability;
 - crash after raw-durable commit before canonical reconciliation;
 - unknown raw-capture COMMIT;
-- unknown reconciliation COMMIT;
+- unknown reconciliation COMMIT recovered by deterministic operation_key;
+- restart after deriving/persisting reconciliation intent;
 - stale job generation;
 - stale endpoint fence;
 - external CAS written but DB reference not committed;
@@ -80,11 +100,13 @@ Contract tests verify:
 - enum/token stability;
 - locale-neutral responses;
 - ETag/Cache-Control behavior where specified;
+- composite Timeline schema and per-series freshness/resolution/coverage metadata;
 - Replay manifest/state/change schemas;
-- Replay state classes and uncertainty fields;
-- no accidental breaking change in public v1 schema.
+- Replay evidence classes and uncertainty fields;
+- no accidental breaking change between Chronicle.Api /api/app and the generated first-party client in the same change;
+- compatibility tests for /api/v1 only after an endpoint is explicitly published as stable.
 
-Build-time OpenAPI output feeds frontend type generation.
+Build-time application OpenAPI output feeds frontend type generation.
 
 ## 6. Frontend unit/component tests
 
@@ -163,11 +185,14 @@ Minimum scenarios:
 3. Selected instant exactly at previous observation returns the previous observed state.
 4. Selected instant exactly at current observation returns the current observed state.
 5. Selected instant strictly inside a different-state observation window returns transition_uncertain rather than an interpolated owner.
-6. Missing/degraded evidence returns no_coverage when required by coverage policy.
-7. Direct replay-state query matches baseline + accepted change-stream reconstruction.
-8. Overlapping uncertainty windows do not gain fabricated exact ordering.
-9. Identity remap/revision invalidates or versions affected replay output.
-10. Conquest-start correction changes displayed elapsed Day/time but an absolute at cursor still points to the same evidence instant.
+6. Same-state valid bracketing observations return supported_continuity, not a claim of omniscient continuous truth.
+7. A current-edge state without a future bound returns last_known only inside the configured freshness horizon and becomes no_coverage after it.
+8. Missing/degraded evidence returns no_coverage when required by coverage policy.
+9. Direct replay-state query matches baseline + accepted change stream + uncertainty windows + coverage/freshness reconstruction.
+10. Applying the new state at reconstructionBoundaryAt never erases the earlier uncertainty window.
+11. Overlapping uncertainty windows do not gain fabricated exact event ordering.
+12. Identity remap/revision invalidates or versions affected replay output.
+13. Conquest-start correction changes displayed elapsed Day/time but an absolute at cursor still points to the same evidence instant.
 
 Performance test:
 
@@ -199,7 +224,7 @@ Targeted Playwright screenshots MAY be used for high-value stable surfaces, espe
 - five-locale header/navigation;
 - Current War;
 - War Timeline with inspection marker;
-- War Replay confirmed/uncertain/no-coverage states;
+- War Replay exact/continuity/uncertain/last-known/no-coverage states;
 - wide-screen archive rail;
 - narrow responsive breakpoints;
 - long French/Russian labels;
