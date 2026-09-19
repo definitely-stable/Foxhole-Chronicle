@@ -1,8 +1,8 @@
 # Foxhole Chronicle — Data Model
 
-Status: **Authoritative working specification — War API, Objective Identity, Time Semantics and collection/storage profile integrated 2026-09-19**
+Status: **Authoritative working specification — War API, Objective Identity, Time Semantics, collection/storage and crash-recovery protocol integrated 2026-09-19**
 
-This document defines the logical data model for Foxhole Chronicle. Official runtime source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Durable payload/archive/recovery semantics are defined in [DATA_LIFECYCLE.md](./DATA_LIFECYCLE.md).
+This document defines the logical data model for Foxhole Chronicle. Official runtime source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Durable payload/archive/recovery semantics are defined in [DATA_LIFECYCLE.md](./DATA_LIFECYCLE.md). Idempotency, transaction and fencing semantics are defined in [IDEMPOTENCY_RECOVERY.md](./IDEMPOTENCY_RECOVERY.md).
 
 ## 1. Core principles
 
@@ -160,12 +160,87 @@ See [adr/elapsed-war-day-vs-game-day.md](./adr/elapsed-war-day-vs-game-day.md).
 
 A batch groups collection work but is **not** an atomic world snapshot.
 
-### 4.3 Fetch metadata
+### 4.3 Durable execution control
+
+`ingestion_jobs` represents one logical collection intent, not one worker attempt.
+
+- `id uuid PK`
+- `job_key text UNIQUE NOT NULL`
+- `source_id uuid NOT NULL FK`
+- `shard text NULL`
+- `endpoint_key text NOT NULL`
+- `collection_profile_version text NOT NULL`
+- `scheduled_for timestamptz NULL`
+- `trigger_kind text NULL`
+- `trigger_key text NULL`
+- `state text NOT NULL` — scheduled/leased/retry_wait/completed/quarantined/failed_terminal
+- `next_eligible_at timestamptz NOT NULL`
+- `lease_owner text NULL`
+- `lease_until timestamptz NULL`
+- `lease_generation bigint NOT NULL DEFAULT 0`
+- `attempt_count integer NOT NULL DEFAULT 0`
+- `last_error_class text NULL`
+- `created_at timestamptz NOT NULL`
+- `updated_at timestamptz NOT NULL`
+
+`ingestion_attempts` records each worker ownership/execution attempt.
+
+- `id uuid PK`
+- `ingestion_job_id uuid NOT NULL FK`
+- `attempt_no integer NOT NULL`
+- `lease_generation bigint NOT NULL`
+- `worker_id text NOT NULL`
+- `state text NOT NULL`
+- `started_at timestamptz NOT NULL`
+- `completed_at timestamptz NULL`
+- `failure_class text NULL`
+- `retryable boolean NULL`
+- `worker_build text NOT NULL`
+
+Unique: `(ingestion_job_id, attempt_no)`.
+
+`endpoint_cursors` is the canonical serialization/fencing row for one semantic endpoint.
+
+- `id uuid PK`
+- `source_id uuid NOT NULL FK`
+- `shard text NULL`
+- `endpoint_key text NOT NULL`
+- `collection_profile_version text NOT NULL`
+- `accepted_fetch_id uuid NULL`
+- `accepted_payload_id uuid NULL`
+- `accepted_semantic_fingerprint char(64) NULL`
+- `accepted_source_version bigint NULL`
+- `accepted_source_last_updated_at timestamptz NULL`
+- `canonical_revision bigint NOT NULL DEFAULT 0`
+- `lease_generation bigint NOT NULL DEFAULT 0`
+- `last_validated_at timestamptz NULL`
+- `last_changed_at timestamptz NULL`
+- `updated_at timestamptz NOT NULL`
+
+Unique: `(source_id, shard, endpoint_key, collection_profile_version)` with null-safe shard treatment in the concrete migration.
+
+`reconciliation_operations` is the idempotency ledger for canonical write transactions.
+
+- `operation_id uuid PK`
+- `ingestion_attempt_id uuid NOT NULL FK`
+- `endpoint_cursor_id uuid NOT NULL FK`
+- `fetch_id uuid NULL`
+- `lease_generation bigint NOT NULL`
+- `outcome text NOT NULL`
+- `canonical_revision bigint NULL`
+- `postgres_xid xid8 NULL` — optional diagnostic only; concrete mapping may use a supported representation
+- `created_at timestamptz NOT NULL`
+- `committed_at timestamptz NULL`
+
+The stable `operation_id`, endpoint cursor fence and unique constraints are authoritative for retry reconciliation. PostgreSQL transaction ID/status is supplemental evidence, not the sole idempotency mechanism.
+
+### 4.4 Fetch metadata
 
 `source_fetches`
 
 - `id uuid PK`
 - `batch_id uuid NULL FK`
+- `ingestion_attempt_id uuid NOT NULL FK`
 - `source_id uuid FK`
 - `shard text NULL`
 - `endpoint_key text NOT NULL`
@@ -185,13 +260,15 @@ A batch groups collection work but is **not** an atomic world snapshot.
 - `payload_id uuid NULL` — physical payload received on this fetch; null for 304
 - `representation_payload_id uuid NULL` — payload representation validated by this fetch; points to prior payload on 304
 - `schema_fingerprint text NULL`
-- `attempt integer NOT NULL`
+- `lease_generation bigint NOT NULL`
+- `transport_attempt_no integer NOT NULL DEFAULT 1`
+- `reconciliation_operation_id uuid NULL FK`
 - `outcome text NOT NULL`
 - `error_code text NULL`
 
-A fetch is one HTTP interaction. A `304` MUST NOT create a duplicate normalized observation, but SHOULD reference the previously accepted representation through `representation_payload_id` so coverage can use the validation instant.
+A fetch is one HTTP interaction. A `304` MUST NOT create a duplicate normalized observation, but SHOULD reference the previously accepted representation through `representation_payload_id` so coverage can use the validation instant. Request/capture timestamps are evidence, not idempotency keys.
 
-### 4.4 Raw payloads
+### 4.5 Raw payloads
 
 `source_payloads` is one logical exact-payload abstraction with hybrid physical storage.
 
@@ -311,7 +388,8 @@ A source map `version` is preserved but is not assumed globally unique across wa
 - `source_payload_id uuid NOT NULL FK`
 - `replica_kind text NOT NULL` — local/offsite
 - `storage_ref text NOT NULL`
-- `state text NOT NULL` — pending/verified/failed/evicted
+- `state text NOT NULL` — pending/uploaded/verified/failed/evicted
+- `uploaded_at timestamptz NULL`
 - `verified_at timestamptz NULL`
 - `last_error_code text NULL`
 - `created_at timestamptz NOT NULL`
@@ -707,22 +785,50 @@ These entities are specified in ANALYTICS.md.
 
 - `id uuid PK`
 - `job_kind text NOT NULL`
+- `dedup_key text NOT NULL`
+- `ordering_key text NULL`
 - `aggregate_type text NULL`
 - `aggregate_id uuid NULL`
-- `dedup_key text NULL`
+- `input_fingerprint char(64) NULL`
 - `payload jsonb NOT NULL`
-- `state text NOT NULL` — pending/running/completed/retry/dead
+- `state text NOT NULL` — pending/processing/retry/completed/dead
+- `priority integer NOT NULL DEFAULT 0`
 - `available_at timestamptz NOT NULL`
 - `lease_owner text NULL`
 - `lease_until timestamptz NULL`
+- `lease_generation bigint NOT NULL DEFAULT 0`
 - `attempt_count integer NOT NULL DEFAULT 0`
-- `last_error_code text NULL`
+- `max_attempts integer NOT NULL`
+- `last_error_class text NULL`
 - `created_at timestamptz NOT NULL`
+- `updated_at timestamptz NOT NULL`
 - `completed_at timestamptz NULL`
+
+Unique: `(job_kind, dedup_key)`.
 
 Outbox rows required by a canonical state mutation MUST be inserted in the same PostgreSQL transaction as that mutation.
 
-Workers claim jobs through PostgreSQL row-lock/lease semantics. External brokers are not required for v1.
+Claim transactions use row locking/`FOR UPDATE SKIP LOCKED`, set a lease and increment `lease_generation`, then commit before the handler executes. Completion requires the same generation.
+
+Outbox execution is at-least-once. External effects therefore require deterministic deduplication/natural idempotency. `LISTEN/NOTIFY` is wake-up only.
+
+### 10.7 Reprocessing runs
+
+`reprocessing_runs`
+
+- `id uuid PK`
+- `scope_type text NOT NULL`
+- `scope_id uuid NOT NULL`
+- `input_fingerprint char(64) NOT NULL`
+- `version_set jsonb NOT NULL`
+- `run_key text UNIQUE NOT NULL`
+- `state text NOT NULL` — pending/running/completed/failed/superseded
+- `lease_generation bigint NOT NULL DEFAULT 0`
+- `started_at timestamptz NULL`
+- `completed_at timestamptz NULL`
+- `created_at timestamptz NOT NULL`
+
+A completed reprocessing output is activated separately in one short fenced transaction. Old versioned outputs remain reproducible.
 
 ## 11. Ruleset epochs
 
@@ -785,6 +891,9 @@ Historical comparison SHOULD avoid normalizing across materially incompatible ru
 - `time_semantics_version text NOT NULL`
 - `war_time_revision integer NOT NULL`
 - `identity_resolution_version text NULL`
+- `sealing_run_id uuid NOT NULL`
+- `lease_generation bigint NOT NULL DEFAULT 0`
+- `input_fingerprint char(64) NOT NULL`
 - `manifest_hash char(64) NULL`
 - `manifest_payload jsonb NULL`
 - `started_at timestamptz NOT NULL`
@@ -792,7 +901,7 @@ Historical comparison SHOULD avoid normalizing across materially incompatible ru
 
 Unique: `(war_id, revision)`.
 
-A sealed manifest is immutable. Accepted late corrections create a new archive revision.
+Only one active sealing run may own a war/revision fence. A sealed manifest is immutable. Accepted late corrections create a new archive revision.
 
 ### 12.4 Archive artifacts
 
@@ -807,6 +916,8 @@ A sealed manifest is immutable. Accepted late corrections create a new archive r
 - `size_bytes bigint NOT NULL`
 - `compression text NULL`
 - `created_at timestamptz NOT NULL`
+
+Recommended uniqueness: `(war_archive_revision_id, artifact_kind, content_hash)`.
 
 Parquet artifacts are analytical projections and MUST NOT replace raw payload evidence.
 
@@ -832,7 +943,13 @@ Initial B-tree indexes SHOULD cover:
 - `war_time_buckets (war_id, bucket_width, bucket_start)`
 - `region_time_buckets (war_id, region_id, bucket_width, bucket_start)`
 - `source_fetches (source_id, shard, endpoint_key, requested_at DESC)`
-- `outbox_jobs (state, available_at)`
+- `ingestion_jobs (state, next_eligible_at)`
+- `ingestion_jobs (source_id, shard, endpoint_key, scheduled_for)`
+- `ingestion_attempts (ingestion_job_id, attempt_no)`
+- `endpoint_cursors (source_id, shard, endpoint_key, collection_profile_version)`
+- `reconciliation_operations (ingestion_attempt_id, created_at DESC)`
+- `outbox_jobs (state, available_at, priority DESC)`
+- `outbox_jobs (job_kind, dedup_key)`
 - `payload_replicas (state, updated_at)`
 - `war_archive_revisions (war_id, revision DESC)`
 
@@ -881,3 +998,10 @@ Every migration MUST be tested against a production-like PostgreSQL container an
 25. Outbox work required by a canonical mutation commits atomically with that mutation.
 26. A sealed archive manifest is immutable within its archive revision.
 27. Disaster recovery is incomplete when restored PostgreSQL references missing external replay payloads.
+28. Logical job, attempt, fetch and reconciliation operation are distinct identities.
+29. Request/capture timestamps are not idempotency keys.
+30. Canonical endpoint mutation is fenced by the current lease generation.
+31. Unknown COMMIT recovery is keyed by stable reconciliation operation identity.
+32. Outbox execution is at-least-once and completion is fenced by lease generation.
+33. A successful external effect without outbox completion is recoverable by repeating the same deduplicated effect.
+34. Reprocessing activation and war sealing are versioned/fenced operations, not in-place rewrites.
