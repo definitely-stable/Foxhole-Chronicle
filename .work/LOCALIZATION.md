@@ -15,7 +15,7 @@ Localization MUST:
 - give every public UI page an explicit, stable language identity;
 - preserve deterministic shareable and cache-safe URLs;
 - auto-select a reasonable first language without overriding explicit user choice;
-- keep canonical source data, metrics, provenance and the public API language-neutral;
+- keep canonical source data, metrics, provenance, the first-party application API and future public API language-neutral;
 - support real plural/grammar rules instead of translated string concatenation;
 - work correctly with SSR/RSC, static rendering, SEO and accessibility;
 - keep language independent from GeoIP, nationality, faction and timezone.
@@ -331,11 +331,14 @@ The presentation layer may map stable tokens to localized labels.
 
 Foxhole place names, faction names and proper nouns SHOULD remain source-faithful unless Chronicle maintains an explicit reviewed localized display-name catalog. A translated label MUST never replace the canonical source value.
 
-## 11. Public API boundary
+## 11. API localization boundary
 
-The public API is locale-neutral.
+Both machine API surfaces are locale-neutral.
 
-The /api/v1/* namespace MUST NOT be nested under /{locale}.
+- P0 first-party application transport: /api/app/*
+- P1 stable public data API: /api/v1/*
+
+Neither namespace may be nested under /{locale}.
 
 Core API representations MUST NOT vary by:
 
@@ -493,7 +496,7 @@ Implementation SHOULD cover:
 - released namespace key parity across all five launch locales;
 - ICU plural/select edge cases;
 - canonical/hreflang alternates;
-- public API representation remains locale-neutral;
+- application/public API representations remain locale-neutral;
 - locale-prefixed page caches do not vary on Accept-Language.
 
 ## 19. Explicit non-goals
