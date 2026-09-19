@@ -6,7 +6,7 @@
     "node": ">=24.21.0 <25"
   },
   "scripts": {
-    "bootstrap": "dotnet restore FoxholeChronicle.slnx && npm --prefix apps/web install",
+    "bootstrap": "dotnet restore FoxholeChronicle.slnx && npm --prefix apps/web ci",
     "build:dotnet": "dotnet build FoxholeChronicle.slnx --no-restore",
     "generate:api": "npm --prefix apps/web run api:generate",
     "build:web": "npm --prefix apps/web run build",
