@@ -64,7 +64,7 @@ P1 includes:
 
 Priority within P1 remains dependency-driven and MUST NOT delay P0 core surfaces.
 
-Public JSON API basics exist from the beginning for the first-party frontend. "Public Data API" in P1 means an explicitly documented external-use product commitment.
+A locale-neutral first-party application API exists from P0 under /api/app and may evolve lockstep with the web application. "Public Data API" in P1 means selected stable external-use resources published under /api/v1 with an explicit compatibility/deprecation commitment.
 
 ## 4. P1/P2 — analytical models
 
@@ -137,7 +137,7 @@ Public UI routes are locale-prefixed.
 - /{locale}/api/docs
 - /{locale}/share/{shareId} — P1/later
 
-The machine API remains under unlocalized /api/v1/*.
+The P0 first-party machine API remains unlocalized under /api/app/*. A future stable external API is reserved under /api/v1/*.
 
 The canonical Current War route is shard-aware. The locale root is only a convenience entry and MUST NOT imply one globally unique current war.
 
@@ -160,7 +160,7 @@ Includes where supported:
 - total/faction casualties;
 - recent casualty rate;
 - observed objective activity;
-- observed regional activity;
+- regional casualty activity or another explicitly registered region metric;
 - a large primary Timeline surface;
 - data freshness and coverage;
 - direct transition into full Timeline and Replay.
@@ -177,7 +177,7 @@ War Timeline is the central Chronicle product.
 
 It is the default primary surface for a selected war.
 
-It SHOULD present one continuous temporal surface with synchronized layers such as:
+It SHOULD present one continuous temporal surface backed by one composite Timeline API request with per-series freshness/resolution/coverage metadata, with synchronized layers such as:
 
 - casualties/casualty rate;
 - observed control balance where metric semantics support it;
