@@ -166,6 +166,8 @@ Owns:
 - normalization;
 - reconciliation;
 - transactional outbox processing;
+- durable job/attempt leases and generation fencing;
+- unknown-COMMIT reconciliation;
 - observed-change detection;
 - aggregates;
 - analytical model recomputation;
@@ -309,7 +311,7 @@ The accepted planning baseline is 30 active maps/shard under `chronicle-collecti
 
 This yields 6,072 scheduled regular requests/day/shard before retries, but request count alone is not a DB-size forecast. Storage sizing MUST be based on measured payload sizes, change ratios and relation/index growth.
 
-See [INGESTION.md](./INGESTION.md), [DATA_MODEL.md](./DATA_MODEL.md), [DATA_LIFECYCLE.md](./DATA_LIFECYCLE.md), [adr/collection-cadence-and-storage.md](./adr/collection-cadence-and-storage.md), and [adr/data-lifecycle-and-recovery.md](./adr/data-lifecycle-and-recovery.md).
+See [INGESTION.md](./INGESTION.md), [DATA_MODEL.md](./DATA_MODEL.md), [DATA_LIFECYCLE.md](./DATA_LIFECYCLE.md), [IDEMPOTENCY_RECOVERY.md](./IDEMPOTENCY_RECOVERY.md), [adr/collection-cadence-and-storage.md](./adr/collection-cadence-and-storage.md), [adr/data-lifecycle-and-recovery.md](./adr/data-lifecycle-and-recovery.md), and [adr/idempotency-transaction-crash-recovery.md](./adr/idempotency-transaction-crash-recovery.md).
 
 ## 12. Reliability model
 
@@ -318,6 +320,8 @@ This is a single-VPS deployment.
 Chronicle MUST prioritize data durability and graceful stale-data behavior over pretending to have multi-node high availability.
 
 The public site must continue serving the last known-good dataset if ingestion fails.
+
+Worker correctness uses at-least-once execution plus deterministic idempotency, not an exactly-once claim. HTTP/CAS work remains outside PostgreSQL transactions. Short reconciliation transactions use explicit endpoint cursor locking and lease-generation fencing. A connection loss around COMMIT is reconciled by stable operation identity before retry.
 
 Operational SLOs SHOULD include:
 
@@ -370,7 +374,11 @@ Required test layers:
 - Playwright;
 - accessibility;
 - load tests;
-- backup restore drills.
+- backup restore drills;
+- kill -9/network-cut/disk-full crash-recovery tests;
+- unknown-COMMIT fault injection;
+- outbox duplicate-effect tests;
+- PITR + external-CAS referential-completeness drills.
 
 ## 15. Authoritative design documents
 
@@ -379,6 +387,7 @@ Required test layers:
 - [DATA_MODEL.md](./DATA_MODEL.md)
 - [INGESTION.md](./INGESTION.md)
 - [DATA_LIFECYCLE.md](./DATA_LIFECYCLE.md)
+- [IDEMPOTENCY_RECOVERY.md](./IDEMPOTENCY_RECOVERY.md)
 - [HISTORICAL_DATA.md](./HISTORICAL_DATA.md)
 - [METRICS.md](./METRICS.md)
 - [ANALYTICS.md](./ANALYTICS.md)
@@ -398,10 +407,11 @@ Before writing core backend domain/data code, the following MUST be reviewed and
 - DATA_MODEL.md
 - INGESTION.md
 - DATA_LIFECYCLE.md
+- IDEMPOTENCY_RECOVERY.md
 - OBJECTIVE_IDENTITY.md
 - METRICS.md
 - DATA_LICENSING.md
 
 The backend MUST NOT encode unresolved upstream semantics as irreversible schema assumptions.
 
-Production bootstrap MUST also validate backup/PITR, raw-archive replication, archive integrity checks and a restore drill before Chronicle treats collected history as durable.
+Production bootstrap MUST also validate idempotency/crash fault injection, backup/PITR, raw-archive replication, archive integrity checks and a DB-to-CAS restore drill before Chronicle treats collected history as durable.
