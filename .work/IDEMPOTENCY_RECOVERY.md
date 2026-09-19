@@ -664,7 +664,14 @@ Attempt creation occurs in the same claim transaction using the returned generat
 
 ### 18.2 Reconciliation fence
 
+Lock endpoint ownership first, then accepted-state cursor:
+
 ~~~sql
+SELECT *
+FROM endpoint_poll_state
+WHERE id = @endpoint_poll_state_id
+FOR UPDATE;
+
 SELECT *
 FROM endpoint_cursors
 WHERE id = @endpoint_cursor_id
@@ -674,11 +681,12 @@ FOR UPDATE;
 Then verify:
 
 ~~~text
-attempt.lease_generation == endpoint_cursor.lease_generation
-and logical job still owns that generation
+attempt.job_lease_generation == ingestion_job.lease_generation
+AND attempt.endpoint_fence_token == endpoint_poll_state.fence_token
+AND endpoint_poll_state.lease_owner_attempt_id == attempt.id
 ~~~
 
-If not, persist only safe immutable evidence and classify stale_fenced.
+If not, canonical reconciliation is `stale_fenced`. Already raw-durable fetch/payload evidence remains immutable and may be reprocessed later.
 
 The reconciliation operation ledger is inserted with a stable client-generated operation ID. A unique conflict on that exact operation ID means "load committed result", not "invent another operation".
 
@@ -773,10 +781,10 @@ return await retryPolicy.ExecuteAsync(async ct =>
         "SET LOCAL statement_timeout = '15s'; " +
         "SET LOCAL transaction_timeout = '30s';", ct);
 
-    // SELECT endpoint cursor FOR UPDATE using targeted raw SQL.
-    // Verify lease_generation.
+    // SELECT endpoint_poll_state FOR UPDATE, then endpoint_cursors FOR UPDATE.
+    // Verify current job_lease_generation + endpoint_fence_token/owner.
+    // Load already raw-durable fetch/payload evidence.
     // Insert reconciliation operation using operationId.
-    // Upsert payload/fetch evidence.
     // Apply accepted canonical mutation.
     // Insert deduplicated outbox rows.
 
@@ -842,7 +850,7 @@ Do not use job IDs, payload hashes, objective IDs, trace IDs or raw error text a
 
 Logs/traces SHOULD carry:
 
-logical_job_id, attempt_id, fetch_id, reconciliation_operation_id, outbox_job_id, lease_generation, archive_revision, trace/span IDs and payload hash as structured fields.
+logical_job_id, attempt_id, fetch_id, reconciliation_operation_id, outbox_job_id, job_lease_generation, endpoint_fence_token, archive_revision, trace/span IDs and payload hash as structured fields.
 
 ## 20. Crash matrix
 
