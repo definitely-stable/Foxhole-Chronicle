@@ -63,14 +63,22 @@ requested_at, completed_at and captured_at MUST NOT define logical job identity.
 
 Before starting canonical reconciliation the worker derives a deterministic **operation key** for the intended interpretation of the evidence and reuses that key for every retry/restart of the same logical reconciliation.
 
-The ledger uses:
+The v1 ledger uses:
 
 - `operation_id` — physical UUIDv7 row identity;
 - `operation_key` — deterministic business/idempotency identity, UNIQUE;
-- `operation_kind` — for example `canonical_ingest` or `reprocess`;
-- `input_fingerprint` — hash of the interpretation inputs/versions relevant to that operation.
+- `operation_kind` — `canonical_ingest` in v1;
+- `input_fingerprint` — hash of the actual interpretation/version inputs used by the committed operation.
 
-For ordinary canonical ingestion the operation key MUST include at least the stable fetch identity plus the parser/normalizer/semantic interpretation versions that define the canonical mutation. Reprocessing uses a distinct operation kind/key including the reprocessing run/version scope.
+For ordinary canonical ingestion the required key is:
+
+`canonical_ingest:{fetch_id}`
+
+The key MUST NOT contain worker identity, lease generation, fence token, timestamps or current parser version. Those values may change across retry/restart/deploy and therefore are not logical operation identity.
+
+The winning committed operation records the actual parser/normalizer/semantic versions through its input fingerprint and normalized evidence. If a deploy occurs after raw durability but before canonical reconciliation, the version that actually commits is recorded and reproducible.
+
+Explicit later reprocessing is a separate versioned workflow/run and MUST NOT masquerade as a second `canonical_ingest` for the same fetch.
 
 A retry/restart derives the same `operation_key`. If it already exists as committed, the worker returns/reloads that result instead of applying the mutation again.
 
