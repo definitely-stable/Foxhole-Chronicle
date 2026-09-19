@@ -876,7 +876,7 @@ Do not use job IDs, payload hashes, objective IDs, trace IDs or raw error text a
 
 Logs/traces SHOULD carry:
 
-logical_job_id, attempt_id, fetch_id, reconciliation_operation_id, outbox_job_id, job_lease_generation, endpoint_fence_token, archive_revision, trace/span IDs and payload hash as structured fields.
+logical_job_id, attempt_id, fetch_id, reconciliation_operation_id, reconciliation_operation_key, outbox_job_id, job_lease_generation, endpoint_fence_token, archive_revision, trace/span IDs and payload hash as structured fields.
 
 ## 20. Crash matrix
 
