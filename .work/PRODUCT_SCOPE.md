@@ -182,7 +182,7 @@ It SHOULD present one continuous temporal surface backed by one composite Timeli
 - casualties/casualty rate;
 - observed control balance where metric semantics support it;
 - observed objective changes;
-- regional activity;
+- regional casualty activity or another explicitly registered region metric;
 - coverage/degraded periods.
 
 All layers share one canonical war-time axis and one inspection marker.
@@ -199,10 +199,12 @@ War Replay is a first-class P0 surface.
 
 It reconstructs Chronicle's **observed historical map/objective state** at a selected time.
 
-It MUST distinguish:
+It MUST distinguish evidence strength:
 
-- confirmed observed state;
+- observed exact checkpoint;
+- supported continuity between same-state samples;
 - transition uncertainty;
+- last-known current-edge state;
 - insufficient coverage.
 
 Replay MUST NOT interpolate a false exact owner/state inside a known transition window.
