@@ -143,6 +143,17 @@ Range: `[1/N,1]` over N eligible regions.
 
 Only compare cohorts using the same region eligibility and base activity definition.
 
+## 3.10 War API source constraints
+
+Metrics derived from the official War API MUST follow [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md).
+
+- `totalEnlistments` is map/region scoped. Chronicle MUST NOT sum it across regions and label the result global unique players or faction population.
+- `dayOfWar` is retained as a raw source field and MUST NOT define Day-vs-Day buckets.
+- map `lastUpdated` MUST NOT be used as an objective event timestamp.
+- casualty counter decreases are anomaly/reset/correction inputs, not ordinary negative casualty deltas.
+- objective-change metrics count Chronicle **observed changes** from valid observations; quarantined source anomalies do not count.
+- map/source `version` values are revision metadata, not elapsed time.
+
 ## 4. Day vs Day metrics
 
 Day-vs-Day uses elapsed war day.
