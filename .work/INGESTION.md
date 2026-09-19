@@ -1,6 +1,6 @@
 # Foxhole Chronicle — Ingestion Architecture
 
-Status: **Authoritative working specification — War API semantics verified 2026-09-19**
+Status: **Authoritative working specification — War API, Time Semantics, collection cadence and storage shape integrated 2026-09-19**
 
 This document defines current/future data collection, historical imports, retries, replay, reconciliation and raw-data retention.
 
@@ -44,17 +44,42 @@ The official War API documents:
 - static map data only needs to be requested once per map between World Conquests;
 - clients must respect returned cache headers and ETags.
 
-Chronicle is a historical analytics product, not a tactical map. Initial product polling targets are therefore deliberately slower than the maximum source update cadence:
+Chronicle is a historical analytics product, not a tactical map.
 
-| Endpoint | Initial Chronicle target | Rule |
+Accepted collection profile:
+
+`collection_profile_version = chronicle-collection-v1`
+
+| Endpoint | Chronicle v1 target | Rule |
 |---|---:|---|
-| `/worldconquest/war` | ~60 s | never before upstream cache eligibility |
-| `/worldconquest/warReport/:map` | ~60 s | per active map, conditional GET |
-| `/worldconquest/maps/:map/dynamic/public` | ~60 s | per active map, conditional GET |
-| `/worldconquest/maps` | ~5 min plus war-transition trigger | discover active map set |
-| `/worldconquest/maps/:map/static` | on new war/new map; optional low-frequency ETag validation | source says once per map between wars |
+| `/worldconquest/war` | **5 min** | one per shard; lifecycle anchor |
+| `/worldconquest/warReport/:map` | **15 min** | per active map, conditional GET |
+| `/worldconquest/maps/:map/dynamic/public` | **15 min** | per active map, conditional GET |
+| `/worldconquest/maps` | **60 min** | plus immediate transition/reconciliation refresh |
+| `/worldconquest/maps/:map/static` | **once per (shard, warId, map)** | additional fetch only for explicit recovery/revalidation |
 
-These are design defaults and MAY be tuned from measured bandwidth, change rate and desired event-bound width. Returned source cache headers always take precedence.
+Returned source cache eligibility always takes precedence over Chronicle's target interval.
+
+v1 uses a **fixed cadence** and has no activity-triggered hot mode. Fixed cadence gives stable coverage semantics and a clean corpus for later 15m -> 30m -> 60m downsampling studies. A short `A -> B -> A` state entirely between baseline polls cannot be recovered later and cannot trigger hot mode.
+
+The scheduler SHOULD deterministically stagger per-map work across each 15-minute window to avoid synchronized bursts. Staggering changes request placement, not the target cadence.
+
+### 2.1 Planning baseline
+
+Capacity planning uses **30 active maps per shard** unless measured runtime count differs.
+
+Regular schedule counts, excluding retries/recovery/static:
+
+- `288` war fetches/day;
+- `2,880` warReport fetches/day;
+- `2,880` dynamic fetches/day;
+- `24` maps fetches/day;
+- **6,072 regular requests/day/shard**;
+- **2,216,280 regular requests/year/shard**.
+
+A 30-day war produces **182,160 regular requests**, plus about 30 baseline static requests under the 30-map assumption.
+
+These are schedule cardinalities, not guaranteed transferred-payload counts. Conditional requests and 304 responses reduce data transfer and normalization work.
 
 No numeric official request-rate limit is documented in the current README, so Chronicle MUST avoid treating "no documented limit" as permission for aggressive polling.
 
@@ -70,7 +95,7 @@ Each stage MUST be replayable from a durable predecessor whenever practical.
 
 Every official-source task has a semantic key:
 
-`source + shard + endpoint_kind + map_name?`
+`source + shard + endpoint_kind + map_name? + collection_profile_version`
 
 Examples:
 
@@ -90,6 +115,8 @@ Per endpoint state:
 - `shard`
 - `endpoint_key`
 - `map_name NULL`
+- `collection_profile_version`
+- `target_interval_seconds`
 - `next_eligible_at`
 - `last_attempt_at`
 - `last_success_at`
@@ -103,9 +130,11 @@ Per endpoint state:
 
 The next fetch time SHOULD be:
 
-`max(source_cache_eligibility, chronicle_target_interval, retry_backoff)`
+`max(source_cache_eligibility, scheduled_target_time, retry_backoff)`
 
-If cache headers are missing/unparseable, use the Chronicle target interval and emit an observability flag.
+If cache headers are missing/unparseable, use the active collection profile target and emit an observability flag.
+
+Every fetch MUST retain the collection profile version and target interval that produced it so historical coverage remains interpretable after future cadence changes.
 
 ## 6. Conditional requests and deduplication
 
@@ -324,20 +353,59 @@ A quarantined source anomaly:
 - does not bound normal ObservedChange intervals;
 - is re-evaluated after the next valid sample.
 
-## 14. Raw payload retention
+## 14. Raw payload retention and storage shape
 
-v1 decision:
+v1 separates durable replay evidence from query-oriented relational history.
 
-- fetch metadata: retain indefinitely;
-- normalized facts: retain indefinitely;
-- aggregates/derived outputs: retain indefinitely subject to algorithm lifecycle;
-- changed official raw payloads: retain hot for a bounded period;
-- unchanged responses: metadata only;
-- historical-import source artifacts: retain immutable manifest and, when permitted, exact imported artifact hash/copy.
+### 14.1 Fetch metadata
 
-Default hot raw retention target SHOULD begin at **30 days** and be revisited after measured storage sizing.
+Fetch/validation metadata is stored in PostgreSQL and retained long-term in v1.
 
-Preferred production storage is content-addressed compressed files on a dedicated persistent filesystem volume, with metadata/hash in PostgreSQL. PostgreSQL JSONB MAY be used for small payloads if measured DB growth remains acceptable.
+At the 30-map baseline Chronicle schedules about 2.216 million regular fetch interactions/year/shard. This cardinality alone does not justify a compaction subsystem before real table/index growth is measured.
+
+A future compaction policy MAY be added only if measured storage/maintenance cost warrants it and coverage/audit semantics remain reproducible.
+
+### 14.2 Raw payload archive
+
+Unique changed official payloads required to replay Chronicle-collected history SHOULD be retained long-term.
+
+Preferred storage:
+
+- content-addressed compressed files on persistent storage;
+- hash, byte size, compression, source identity and storage reference in PostgreSQL;
+- 304 responses create metadata only and reference the previously accepted representation;
+- byte-identical 200 responses reuse the existing payload identity.
+
+The old 30-day-hot-only assumption is superseded for replay-critical source payloads. Physical storage tier may become colder later, but content identity and replayability MUST survive.
+
+### 14.3 Sparse relational history
+
+PostgreSQL MUST NOT durably expand every unchanged map item occurrence from every changed snapshot merely for replayability.
+
+Relational history SHOULD store:
+
+- map observation/provenance;
+- current/canonical state;
+- first-seen/material-change/reappearance evidence;
+- ambiguous/unmatched/manual-review evidence;
+- state intervals;
+- observed changes;
+- counter observations;
+- coverage;
+- aggregates/models.
+
+The immutable raw payload archive remains the complete source snapshot evidence.
+
+### 14.4 Raw vs semantic fingerprints
+
+Chronicle keeps:
+
+- `content_hash` — exact response bytes;
+- `semantic_fingerprint` — versioned canonical parser-level representation, insensitive to irrelevant ordering/serialization differences.
+
+If exact bytes change but the semantic fingerprint does not, Chronicle may retain provenance/raw evidence while skipping item-level relational mutation.
+
+Semantic fingerprinting MUST NOT depend on canonical objective identity; it is a source-payload normalization concept.
 
 ## 15. Historical import
 
@@ -432,18 +500,20 @@ For adjacent valid counter observations:
 
 Identity resolution is a first-class ingestion stage defined by [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md).
 
-For each valid changed static/dynamic payload:
+For each valid semantically changed static/dynamic payload:
 
-1. persist immutable `source_item_observations`;
-2. classify raw items through the current taxonomy version;
-3. run source-level anomaly checks before item-level state mutation;
-4. generate within-war identity candidates;
-5. calculate deterministic feature vectors/scores;
-6. persist all serious candidates;
-7. auto-accept only when score threshold **and** best-vs-second-best ambiguity margin pass;
-8. persist ambiguous/unmatched decisions without guessing;
-9. materialize `objective_observations` only for accepted resolution decisions;
-10. derive state intervals and ObservedChanges from accepted valid observations.
+1. persist/retain the immutable raw payload and map observation;
+2. materialize only source-item evidence required for first-seen/material-change/reappearance/ambiguity/unmatched/review semantics; unchanged item occurrences need no duplicate relational row;
+3. classify current raw items through the current taxonomy version;
+4. run source-level anomaly checks before item-level state mutation;
+5. generate within-war identity candidates for items requiring resolution/change processing;
+6. calculate deterministic feature vectors/scores;
+7. persist all serious candidates for material decisions;
+8. auto-accept only when score threshold **and** best-vs-second-best ambiguity margin pass;
+9. persist ambiguous/unmatched decisions without guessing;
+10. materialize canonical state evidence only when needed to establish/alter history;
+11. extend unchanged-state coverage from valid snapshot/304 validation rather than duplicate item rows;
+12. derive state intervals and ObservedChanges from accepted valid evidence.
 
 `teamId`, mutable flags and one-sample presence/absence MUST NOT serve as durable identity keys.
 
@@ -451,7 +521,7 @@ A single missing dynamic item does not tombstone or delete a canonical objective
 
 ### 17.1 Matcher reprocessing
 
-Matcher/taxonomy upgrades run against preserved source item observations and produce a new `identity_resolution_version`.
+Matcher/taxonomy upgrades MUST be able to replay preserved raw payload snapshots for the selected war/map/time range and produce a new `identity_resolution_version`. Sparse relational source-item evidence is an optimization/audit index, not the only replay source.
 
 Reprocessing MUST:
 
@@ -526,7 +596,14 @@ Worker MUST emit:
 - fetch attempts by source/shard/endpoint/status;
 - 200/304 ratio;
 - changed-payload ratio;
+- semantic-changed-payload ratio;
+- collection profile version and scheduler lag;
 - bytes fetched/stored;
+- compressed raw archive bytes/day;
+- raw payload item-count distribution;
+- source-item evidence rows/day;
+- PostgreSQL table/index growth by relation;
+- WAL bytes/day;
 - last successful fetch;
 - source cache wait;
 - ingestion lag;
@@ -586,3 +663,10 @@ Before backend feature work depends on ingestion:
 24. A conquest-start correction increments `war_time_revision` and triggers war-relative recomputation without rewriting raw timestamps.
 25. Boundary-crossing observed changes remain boundary-ambiguous.
 26. Counter deltas are not silently interpolated across analytical bucket boundaries.
+27. The active collection profile is `chronicle-collection-v1`: war 5m, warReport 15m, dynamic 15m, maps 60m, static once per war/map.
+28. Every fetch records collection profile/version and target interval.
+29. Scheduler staggers per-map work instead of bursting all 30 maps at the same instant.
+30. Replay-critical unique raw payloads remain available long-term.
+31. A raw-byte-only change with identical semantic fingerprint does not force item-level mutation.
+32. Unchanged map items do not create duplicate relational item rows solely because another snapshot was collected.
+33. Identity reprocessing can reconstruct full occurrences from the raw payload archive.
