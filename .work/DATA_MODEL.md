@@ -1,6 +1,6 @@
 # Foxhole Chronicle — Data Model
 
-Status: **Authoritative working specification — War API semantics verified 2026-09-19**
+Status: **Authoritative working specification — War API, Objective Identity and Time Semantics integrated 2026-09-19**
 
 This document defines the logical data model for Foxhole Chronicle. Official runtime source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md).
 
@@ -41,6 +41,7 @@ Chronicle uses internal immutable identifiers even when an upstream source provi
 - `required_victory_towns integer NULL`
 - `short_required_victory_towns integer NULL`
 - `status text NOT NULL`
+- `war_time_revision integer NOT NULL DEFAULT 0`
 - `ruleset_epoch_id uuid NULL`
 - `created_at timestamptz NOT NULL`
 - `updated_at timestamptz NOT NULL`
@@ -78,36 +79,52 @@ Objective identity is defined in [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md
 
 ## 3. Time semantics
 
-Chronicle keeps multiple clocks explicitly.
+Canonical rules are defined in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md).
 
-### 3.1 Ingestion clock
+Chronicle keeps absolute source/observation time separate from derived war-relative time.
 
-`captured_at`: Chronicle time at which a valid response/observation was recorded.
+### 3.1 Absolute clocks
 
-### 3.2 Source clocks
+- `requested_at`: HTTP request start.
+- `completed_at`: HTTP request completion.
+- `captured_at`: Chronicle observation time used for normalized state.
+- `source_timestamp`: source-provided timestamp only when its semantics are known.
+- `source_map_last_updated_at`: map-state update metadata; never an item event timestamp.
 
-`source_timestamp`: timestamp supplied by a source when its semantics are known.
+Official raw Unix values are preserved as `bigint` before conversion to `timestamptz`.
 
-For official map payloads, preserve both:
+### 3.2 War-relative clock
 
-- `source_map_last_updated_raw bigint`
-- `source_map_last_updated_at timestamptz`
+Chronicle uses:
 
-Official `lastUpdated` is map-state update metadata, not an item-level event timestamp.
+`time_semantics_version = elapsed-war-clock@1`
 
-Official war timestamps MUST also preserve their raw integer values at the source-observation layer before validated conversion.
+For an instant inside conquest:
 
-### 3.3 War-relative clock
+`elapsed_war_day = floor((t - conquest_start_at) / 86400s) + 1`
 
-- `war_elapsed_seconds bigint`
-- `elapsed_war_day integer`
-- `calendar_date_utc date`
+Completed conquest uses the half-open interval:
 
-The canonical analytical day is elapsed war day:
+`[conquest_start_at, conquest_end_at)`
 
-`floor((t - conquest_start_at) / 86400s) + 1`
+and:
 
-It MUST NOT be silently equated with UTC calendar day or upstream `dayOfWar`.
+`completed_day_count = ceil((conquest_end_at - conquest_start_at) / 86400s)`
+
+for valid positive duration.
+
+### 3.3 Canonical storage rule
+
+Absolute observation timestamps are canonical raw facts.
+
+`war_elapsed_seconds` and `elapsed_war_day` MAY be stored as denormalized/recomputed fields for query performance, but only together with:
+
+- `time_semantics_version`;
+- `war_time_revision`.
+
+If the canonical conquest start changes, old absolute observations remain unchanged and all war-relative denormalized values/buckets are recomputed.
+
+UTC calendar date is presentation/secondary indexing only and MUST NOT define analytical day boundaries.
 
 See [adr/elapsed-war-day-vs-game-day.md](./adr/elapsed-war-day-vs-game-day.md).
 
@@ -207,8 +224,10 @@ ETag is metadata/transport validation, not payload identity.
 - `scheduled_conquest_end_time_raw bigint NULL`
 - `required_victory_towns_raw integer NULL`
 - `short_required_victory_towns_raw integer NULL`
-- `war_elapsed_seconds bigint NULL`
-- `elapsed_war_day integer NULL`
+- `war_elapsed_seconds bigint NULL` — denormalized/recomputable
+- `elapsed_war_day integer NULL` — denormalized/recomputable
+- `time_semantics_version text NULL`
+- `war_time_revision integer NULL`
 - `normalizer_version text NOT NULL`
 - `quality_flags jsonb NOT NULL DEFAULT '{}'`
 
@@ -223,8 +242,10 @@ War timestamps are converted only after millisecond-range validation.
 - `region_id uuid FK`
 - `source_fetch_id uuid FK`
 - `captured_at timestamptz NOT NULL`
-- `war_elapsed_seconds bigint NULL`
-- `elapsed_war_day integer NULL`
+- `war_elapsed_seconds bigint NULL` — denormalized/recomputable
+- `elapsed_war_day integer NULL` — denormalized/recomputable
+- `time_semantics_version text NULL`
+- `war_time_revision integer NULL`
 - `warden_casualties bigint NULL`
 - `colonial_casualties bigint NULL`
 - `region_enlistments bigint NULL`
@@ -417,6 +438,11 @@ Unknown icon codes and flag bits MUST survive losslessly.
 - `current_map_observation_id uuid NULL FK`
 - `detector_version text NOT NULL`
 - `identity_resolution_version text NULL`
+- `time_semantics_version text NOT NULL`
+- `war_time_revision integer NOT NULL`
+- `earliest_possible_elapsed_day integer NULL`
+- `latest_possible_elapsed_day integer NULL`
+- `bucket_assignment_status text NOT NULL`
 - `coverage_ratio numeric NULL`
 - `confidence_class text NOT NULL`
 - `quality_flags jsonb NOT NULL DEFAULT '{}'`
@@ -462,18 +488,28 @@ Chronicle SHOULD use explicit aggregate tables rather than hiding core analytics
 `war_time_buckets`
 
 - `war_id`
-- `bucket_start`
+- `bucket_start timestamptz`
+- `bucket_end_exclusive timestamptz`
 - `bucket_width`
-- `elapsed_war_day`
+- `elapsed_war_day integer NULL`
+- `day_status text NULL`
+- `day_span_fraction numeric NULL`
 - casualty cumulative values
-- casualty deltas
+- observed casualty deltas
+- boundary-ambiguous delta metadata
 - casualty rates
-- objective change counts
+- exact-bucket objective change counts
+- boundary-ambiguous objective change counts
 - active-region counts
 - coverage metrics
+- `time_semantics_version text NOT NULL`
+- `war_time_revision integer NOT NULL`
 - `aggregate_version`
+- `input_fingerprint char(64)`
 
-Unique: `(war_id, bucket_start, bucket_width, aggregate_version)`.
+Unique SHOULD include the time revision:
+
+`(war_id, bucket_start, bucket_width, time_semantics_version, war_time_revision, aggregate_version)`.
 
 ### 8.2 Region buckets
 
@@ -702,6 +738,9 @@ Every migration MUST be tested against a production-like PostgreSQL container an
 10. Unknown icon/enum/flag values are preserved losslessly.
 11. Quarantined or ambiguous source observations do not become normal canonical state without an accepted resolution.
 12. No derived value exists without algorithm/version identity.
-13. No analytical result hides inadequate source or identity coverage.
-14. No historical import erases original provenance.
-15. No share/export silently changes semantics after an algorithm version change.
+13. No local timezone, UTC calendar midnight or raw `dayOfWar` may define Chronicle elapsed-day buckets.
+14. Conquest end is exclusive for conquest-day assignment; an exact 24-hour end boundary does not create an empty next day.
+15. War-relative denormalized values are invalid without matching `time_semantics_version` and `war_time_revision`.
+16. No analytical result hides inadequate source or identity coverage.
+17. No historical import erases original provenance.
+18. No share/export silently changes semantics after an algorithm/version or war-time-revision change.
