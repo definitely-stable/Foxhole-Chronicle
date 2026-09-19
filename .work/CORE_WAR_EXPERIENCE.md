@@ -235,8 +235,8 @@ It SHOULD contain:
 - recent casualty rate;
 - observed objective activity;
 - observed regional activity;
-- compact/main Timeline view;
-- direct entry into full Timeline and Replay.
+- a large Timeline surface that visually dominates the working page;
+- direct entry into the canonical full-war Timeline and Replay.
 
 It MUST NOT attempt to show every map object or replace a tactical map.
 
@@ -260,7 +260,9 @@ optional secondary context
 
 The cinematic hero is product identity, not the main analytical surface.
 
-On working Current War / War pages it SHOULD be compact enough that the Timeline is visible early in the viewport.
+On working Current War / War pages it SHOULD be compact enough that the Timeline is visible early in the viewport and remains the dominant data surface.
+
+Current War SHOULD reuse the same Timeline data/view model as the canonical war workspace, with the inspection cursor pinned to the latest accepted history by default.
 
 ### 6.2 P0 exclusions
 
