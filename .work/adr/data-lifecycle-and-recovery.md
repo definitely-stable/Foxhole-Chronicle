@@ -23,6 +23,8 @@ See:
 - [DATA_LIFECYCLE.md](../DATA_LIFECYCLE.md)
 - [INGESTION.md](../INGESTION.md)
 - [DATA_MODEL.md](../DATA_MODEL.md)
+- [IDEMPOTENCY_RECOVERY.md](../IDEMPOTENCY_RECOVERY.md)
+- [adr/idempotency-transaction-crash-recovery.md](./idempotency-transaction-crash-recovery.md)
 - [research/DATA_LIFECYCLE_ARCHIVAL_RESEARCH_2026-09-19.md](../research/DATA_LIFECYCLE_ARCHIVAL_RESEARCH_2026-09-19.md)
 
 ## Decision
@@ -55,15 +57,15 @@ External CAS uses Zstandard compression by default.
 
 ### Crash consistency
 
-External payload bytes must be durably published before PostgreSQL commits a reference to them.
+External payload bytes must be durably published before PostgreSQL commits a reference to them. Local POSIX publication follows temp-write + file fsync + atomic publish + parent-directory fsync; object-store adapters must verify their own conditional-write/checksum semantics.
 
-An orphan CAS object is acceptable and garbage-collectable.
+An orphan CAS object is acceptable and garbage-collectable after grace/reference/in-flight checks.
 
 A committed DB reference to a missing CAS object is not acceptable.
 
 ### Transactional outbox
 
-PostgreSQL transactional outbox is the v1 durable asynchronous work mechanism.
+PostgreSQL transactional outbox is the v1 durable asynchronous work mechanism. Delivery is at-least-once; handlers are idempotent/deduplicated and lease completion is generation-fenced. LISTEN/NOTIFY, if used, is wake-up only.
 
 No Kafka/RabbitMQ/Redis queue is required.
 
@@ -118,9 +120,9 @@ Replay-critical raw payloads are replicated to an independent offsite failure do
 
 Initial operational targets:
 
-- normal raw-replication lag < 5m;
+- normal **verified** raw-replication lag < 5m;
 - alert > 15m;
-- overall single-VPS DB/raw RPO target <= 15m until tighter measured guarantees are established.
+- <=15m complete-recovery RPO is an objective, not a claim, until both WAL/PITR and external-payload recovery watermark measurements prove it.
 
 Versioning and immutable/WORM-like retention SHOULD be used when the selected storage supports them.
 
@@ -146,6 +148,7 @@ These require measured evidence and a new ADR.
 - Archive sealing gives each completed war a reproducible data revision.
 - 15m/1h/1d outputs can be generated from one canonical collected history.
 - Backup validity now requires tested restore and DB-to-CAS referential verification.
+- The safe recovery point is bounded by both PostgreSQL WAL availability and verified external replay-payload availability.
 
 ## Rejected alternatives
 
