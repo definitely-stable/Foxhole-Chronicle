@@ -13,11 +13,13 @@ Research synthesis: [research/OBJECTIVE_IDENTITY_RESEARCH_2026-09-19.md](./resea
 
 Chronicle MUST keep these layers separate.
 
-### 1.1 Source item observation
+### 1.1 Source item occurrence and materialized evidence
 
-One item occurrence in one static/dynamic source payload.
+A **source item occurrence** is one item occurrence in one static/dynamic raw source payload. The complete occurrence is immutable source evidence stored through the archived payload.
 
-This is evidence, not canonical identity.
+A relational `source_item_observation` is a sparse materialization of an occurrence when Chronicle needs it to anchor identity/state history, ambiguity, review or reprocessing output.
+
+The raw payload remains the complete replay source. Relational materialization is evidence/indexing, not canonical identity.
 
 ### 1.2 Within-war objective identity
 
@@ -159,14 +161,29 @@ Aliases do not establish identity by themselves.
 
 ### 3.4 source_item_observations
 
-Every raw map item occurrence that may participate in identity matching.
+`source_item_observations` stores **sparse materialized source-item evidence**, not every unchanged item occurrence from every snapshot.
+
+The complete source occurrence set remains recoverable from the immutable archived raw payload.
+
+Materialize a row when the occurrence is required for:
+
+- first-seen identity establishment;
+- material identity/state change;
+- reappearance;
+- ambiguity/unmatched state;
+- manual review;
+- persisted matcher/reprocessing evidence.
+
+Fields:
 
 - `id uuid PK`
 - `map_observation_id uuid NOT NULL FK`
+- `source_payload_id uuid NOT NULL FK`
 - `war_id uuid NOT NULL FK`
 - `region_id uuid NOT NULL FK`
 - `source_map_name text NOT NULL`
 - `source_item_kind text NOT NULL`
+- `evidence_reason text NOT NULL`
 - `source_array_ordinal integer NULL`
 - `icon_type_raw integer NULL`
 - `team_id_raw text NULL`
@@ -184,10 +201,11 @@ Every raw map item occurrence that may participate in identity matching.
 
 Recommended uniqueness:
 
-`(map_observation_id, raw_item_hash)`
+`(map_observation_id, raw_item_hash, evidence_reason)`
 
-where the raw item hash is an observation-local dedup fingerprint, not a durable objective ID.
+The raw item hash is an observation-local fingerprint, not a durable objective ID.
 
+An unchanged item in a later valid snapshot does not require another relational row. Continued-state evidence comes from the accepted map representation and its validation/coverage chain.
 ### 3.5 identity_match_runs
 
 - `id uuid PK`
@@ -646,11 +664,13 @@ Never rewrite old evidence rows.
 Immutable evidence:
 
 - source fetch;
-- payload hash;
+- exact raw payload/content hash;
 - map observation;
-- source item observation;
-- raw coordinates/icon/flags/team;
-- parser version.
+- sparse materialized source-item evidence where persisted;
+- raw coordinates/icon/flags/team reconstructed from archived payload when needed;
+- parser/semantic-fingerprint version.
+
+The archived raw payload sequence is the complete replay basis. A matcher version MUST NOT depend on the historical presence of a duplicated relational row for every unchanged occurrence.
 
 Versioned inference:
 
@@ -664,6 +684,8 @@ Versioned inference:
 - manual overrides.
 
 A matcher upgrade produces a new `identity_match_run` and a new `identity_resolution_version`.
+
+Reprocessing MAY reconstruct ephemeral full item-occurrence streams from archived payloads and persist only material decision/evidence rows. This keeps replayability independent from polling-frequency relational duplication.
 
 v1 and v2 results MUST be diffable by:
 
@@ -976,6 +998,16 @@ No production matcher threshold is accepted without labeled-corpus metrics.
 
 Cross-war auto-matching SHOULD NOT block initial collector development.
 
+## 27.1 Collection/storage interaction
+
+Objective Identity MUST remain correct under the accepted collection/storage profile:
+
+- dynamic collection baseline is 15 minutes in `chronicle-collection-v1`;
+- a transient `A -> B -> A` state wholly between polls is unobservable and MUST NOT be synthesized;
+- unchanged item occurrences across snapshots do not require duplicate relational evidence rows;
+- valid snapshot/304 validation can extend state coverage without fabricating a new item event;
+- full matcher replay reads the archived raw snapshot sequence;
+- raw payload content identity and semantic snapshot fingerprint remain distinct from objective identity.
 ## 28. Production acceptance gate
 
 Objective Identity v1 is ready for production only when:
