@@ -258,36 +258,53 @@ The official docs explicitly warn that unlisted flag bits are internal and may b
 
 **VERIFIED FACT:** the documented map-item schema has no stable item/objective ID.
 
-**UNKNOWN:** cross-war stability guarantees for coordinates, names, icon codes, and `regionId` are not documented.
+**UNKNOWN:** cross-war stability guarantees for coordinates, names, icon codes, array order, and `regionId` are not documented.
 
-Therefore Chronicle cannot derive a guaranteed durable cross-war objective identity from a single upstream key.
+Therefore Chronicle cannot derive a guaranteed durable canonical objective identity from a single upstream key or a hash of mutable source fields.
 
-### v1 identity policy
+### Chronicle identity layers
+
+The source contract supports Chronicle storing:
+
+1. raw source item observations;
+2. Chronicle-inferred within-war objective continuity;
+3. Chronicle-inferred cross-war canonical identity;
+4. revisions/aliases over that canonical identity.
+
+Only layer 1 is direct source evidence. Layers 2–4 are versioned Chronicle inference.
+
+### v1 identity constraints
 
 Within a war/map:
 
 1. scope candidates by shard + war + source map name;
-2. use static reference data where applicable;
-3. compare normalized coordinates;
-4. require compatible objective family/icon semantics;
-5. use Major text labels/name only as supporting evidence;
-6. compare local neighborhood/context where needed;
-7. accept only an unambiguous best match;
-8. otherwise quarantine as unmatched/ambiguous.
+2. preserve each raw source item independently of canonical matching;
+3. use static reference data where applicable;
+4. compare normalized coordinates;
+5. require compatible objective-family/icon semantics;
+6. use Major static text only as supporting context, not as a stable ID/name guarantee;
+7. compare local neighborhood/context where useful;
+8. accept only when both a versioned score threshold and a best-vs-second-best ambiguity margin pass;
+9. otherwise persist `ambiguous` or `unmatched` instead of guessing.
 
-Across wars, matching MUST be stricter and may create a new revision or identity rather than force a merge.
+Across wars, matching MUST be stricter and may create a new revision, a new canonical identity, or an unresolved candidate relation rather than force a merge.
 
-No numeric coordinate tolerance is authoritative yet. It MUST be calibrated against a captured real-payload corpus and golden fixtures before production matching is enabled.
+No numeric coordinate tolerance, matcher precision target, or acceptance threshold is an upstream fact. These MUST be calibrated against a labeled real-payload corpus and frozen into a matcher version before production auto-matching.
 
-Every accepted match records:
+Dynamic fields such as `teamId`, scorched/build/claimed flags, and one-sample presence/absence are primarily state evidence, not durable identity keys.
 
-- identity algorithm version;
-- match method;
-- candidate evidence;
-- distance/score where applicable;
-- ambiguity margin;
+Every candidate/decision SHOULD retain:
+
+- matcher/taxonomy version;
+- source item observation identity;
+- candidate canonical identity/revision;
+- feature vector;
+- distance/score;
+- best-vs-second-best ambiguity margin;
 - source map version;
 - source payload hash.
+
+See [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md) for the authoritative Chronicle-owned matcher design.
 
 ## 10. HTTP caching and polling
 
@@ -527,7 +544,7 @@ Still intentionally unresolved and MUST remain conservative:
 - casualty monotonicity/correction guarantees;
 - global uniqueness scope of `warId` across shards;
 - coordinate origin/orientation as an official guarantee;
-- stable cross-war objective matching tolerance;
+- calibrated family-specific coordinate/matcher thresholds and ambiguity margins;
 - exact numeric HTTP cache lifetimes/rate limits beyond returned headers and documented "may update" cadence.
 
 ## 21. Licensing note
