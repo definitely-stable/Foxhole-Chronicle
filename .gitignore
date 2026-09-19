@@ -11,6 +11,7 @@ artifacts/
 # Node / Next.js
 node_modules/
 apps/web/.next/
+apps/web/next-env.d.ts
 apps/web/out/
 apps/web/coverage/
 apps/web/playwright-report/
