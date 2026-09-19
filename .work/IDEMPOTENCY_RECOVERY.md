@@ -373,9 +373,9 @@ Chronicle protocol:
 6. if present, treat the operation as committed and load its result;
 7. if absent and the xid8 is available, pg_xact_status(xid8) MAY be used as a diagnostic/fast-path while status is retained;
 8. if status is committed, re-read by operation ID and alert on invariant violation if missing;
-9. if status is aborted, retry the same logical operation ID;
+9. if status is aborted, retry the same logical operation key;
 10. if status is in progress, wait with a bounded reconciliation deadline;
-11. if pg_xact_status returns NULL/unknown, operation-ID reconciliation remains authoritative: retry the same operation through unique constraints and endpoint fencing, never create a new logical operation.
+11. if pg_xact_status returns NULL/unknown, operation-key reconciliation remains authoritative: retry/reconcile the same operation_key through its unique constraint and endpoint fencing, never create a new logical operation.
 
 The process MUST NOT assume that a CommitAsync exception means rollback.
 
@@ -959,7 +959,7 @@ Chronicle MUST NOT:
 
 The worker protocol is production-ready only when:
 
-1. deterministic logical job and reconciliation operation identities are implemented;
+1. deterministic logical job identity and canonical reconciliation operation_key are implemented;
 2. endpoint cursor fencing prevents stale completion rollback;
 3. reconciliation transaction boundaries match this specification;
 4. unknown COMMIT is fault-injection tested;
