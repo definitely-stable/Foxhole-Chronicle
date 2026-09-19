@@ -61,11 +61,15 @@ All localized UI routes MUST use an explicit locale prefix:
 /fr/
 /pt-BR/
 
-/en/war/live-1/129
-/ru/war/live-1/129
-/zh-Hans/war/live-1/129
-/fr/war/live-1/129
-/pt-BR/war/live-1/129
+/en/current/live-1
+/ru/current/live-1
+/zh-Hans/current/live-1
+/fr/current/live-1
+/pt-BR/current/live-1
+
+/en/war/{chronicleWarId}
+/ru/war/{chronicleWarId}/replay
+/fr/war/{chronicleWarId}?at=2026-09-17T18%3A30%3A00Z
 ~~~
 
 Chronicle uses next-intl localePrefix = always.
@@ -83,8 +87,8 @@ v1 keeps technical route segments stable across languages:
 ~~~text
 /en/archive
 /fr/archive
-/ru/archive
-/zh-Hans/compare
+/ru/current/live-1
+/zh-Hans/war/{chronicleWarId}/replay
 ~~~
 
 v1 MUST NOT maintain translated route dictionaries for analytical routes.
