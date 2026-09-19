@@ -19,6 +19,10 @@ describe("locale negotiation", () => {
     expect(negotiateLocale(header)).toBe(expected);
   });
 
+  it("ignores malformed or invalid-quality language ranges", () => {
+    expect(parseAcceptLanguage("%%%bad%%%,fr;q=2,en;q=0.8")).toEqual(["en"]);
+  });
+
   it.each([
     "zh-TW,zh;q=0.9,en;q=0.8",
     "zh-HK,zh;q=0.9,en;q=0.8",
