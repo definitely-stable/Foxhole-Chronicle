@@ -109,28 +109,29 @@ The endpoint key scopes ETag/cache state. ETags MUST NOT be shared across shards
 
 ## 5. Scheduler
 
+Scheduling/cache eligibility and endpoint execution ownership are persisted in `endpoint_poll_state`, separate from logical `ingestion_jobs` and accepted-state `endpoint_cursors`.
+
 Per endpoint state:
 
-- `source_key`
-- `shard`
-- `endpoint_key`
-- `map_name NULL`
-- `collection_profile_version`
-- `target_interval_seconds`
-- `next_eligible_at`
-- `last_attempt_at`
-- `last_success_at`
-- `last_changed_at`
-- `etag`
-- `cache_control`
-- `consecutive_failures`
-- `circuit_state`
-- `lease_owner`
-- `lease_until`
+- `source_id`;
+- `shard`;
+- `endpoint_key`;
+- `collection_profile_version`;
+- `target_interval_seconds`;
+- `next_due_at`;
+- `cache_eligible_at`;
+- `last_attempt_at`;
+- `last_success_at`;
+- `etag`;
+- `consecutive_failures`;
+- `circuit_open_until`;
+- `lease_owner_attempt_id`;
+- `lease_until`;
+- `fence_token`.
 
 The next fetch time SHOULD be:
 
-`max(source_cache_eligibility, scheduled_target_time, retry_backoff)`
+`max(cache_eligible_at, next_due_at, retry_backoff)`
 
 If cache headers are missing/unparseable, use the active collection profile target and emit an observability flag.
 
@@ -155,18 +156,24 @@ On `200`:
 1. read response bytes with configured size/time limits;
 2. compute SHA-256 over exact raw response bytes;
 3. choose payload storage policy (inline or external CAS) without changing payload identity;
-4. for external CAS, durably publish the compressed object **before** committing a PostgreSQL reference;
-5. upsert `source_payloads`;
-6. record ETag/content hash/representation link;
-7. if hash is unchanged for the same semantic endpoint, skip fact mutation;
-8. if changed, normalize, validate and reconcile;
+4. for external CAS, durably publish the compressed object before PostgreSQL may reference it;
+5. execute a short **raw-capture transaction** that persists the stable `source_fetch`, exact inline bytes or external payload reference, representation link, job generation and endpoint fence token;
+6. after raw-capture COMMIT, the response has crossed the Chronicle raw-durable boundary;
+7. if hash/semantic representation is unchanged for the same semantic endpoint, canonical fact mutation may be skipped while validation/coverage is reconciled;
+8. if changed, normalize, validate and execute a separate short canonical reconciliation transaction;
 9. write required downstream/outbox jobs in the same PostgreSQL transaction as canonical mutations.
 
-If an external CAS write succeeds but the DB transaction fails, the resulting unreferenced object is harmless and can be garbage-collected after a grace period. The reverse state — committed DB reference to a missing external payload — MUST NOT occur.
+A successful source response MUST NOT depend on a later canonical transaction for its only durable Chronicle copy.
+
+If an external CAS write succeeds but the raw-capture transaction fails, the resulting unreferenced object is harmless and can be garbage-collected after a grace period. The reverse state — committed DB reference to a missing external payload — MUST NOT occur.
+
+If the process crashes after raw-capture COMMIT but before canonical reconciliation, recovery MUST discover the raw-durable fetch and resume/reconcile it rather than refetching merely to reconstruct lost provenance.
 
 ETag is a transport/cache validator. SHA-256 is Chronicle's durable payload identity.
 
 Local `captured_at` MUST NOT be the idempotency key.
+
+v1 MUST NOT use transparent HTTP retries that hide multiple network exchanges behind one provenance record. Timeouts, concurrency limits and circuit-breaking may be automatic; after a failed exchange, a retry is represented by a new ingestion attempt/fetch.
 
 ## 7. Source timestamps and map revisions
 
@@ -259,8 +266,10 @@ Chronicle MUST distinguish:
 - one logical collection job from its execution attempts;
 - one ingestion attempt from one HTTP fetch/exchange;
 - fetch evidence from canonical reconciliation;
-- external raw durability from PostgreSQL commit;
-- job ownership from canonical-state fencing.
+- external raw durability from PostgreSQL canonical reconciliation;
+- job ownership from endpoint execution/canonical-state fencing.
+
+`ingestion_jobs.lease_generation` protects ownership of one logical job. `endpoint_poll_state.fence_token` protects the right to affect one semantic endpoint. They MUST NOT be treated as the same token.
 
 Logical job states are intentionally small:
 
@@ -271,7 +280,7 @@ Logical job states are intentionally small:
 - `quarantined`;
 - `failed_terminal`.
 
-Claiming a job atomically increments `lease_generation`. That generation is a fencing token. A worker whose lease generation is no longer current may retain immutable fetch/payload evidence but MUST NOT mutate canonical current state.
+Claiming a job atomically increments `lease_generation`. That generation fences only the logical job. A worker whose lease generation is no longer current may retain immutable fetch/payload evidence but MUST NOT mutate canonical current state.
 
 Retries create a new `ingestion_attempt` linked to the same logical job. The logical job/reconciliation identity remains stable across retries.
 
@@ -303,7 +312,9 @@ Use durable lease rows for work ownership and an `endpoint_cursors` row as the c
 
 The reconciliation transaction locks the endpoint cursor `FOR UPDATE` and verifies `lease_generation`.
 
-If a slow request completes after its lease expired and a newer generation owns the job:
+Before HTTP execution, the attempt must also acquire the semantic endpoint lease in `endpoint_poll_state`; acquisition/steal increments the endpoint `fence_token`. Renewal/release requires the same owner attempt and token.
+
+If a slow request completes after its job lease or endpoint fence became stale:
 
 - retain safe immutable evidence;
 - classify the attempt `stale_fenced`;
