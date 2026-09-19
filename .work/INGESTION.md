@@ -2,7 +2,7 @@
 
 Status: **Authoritative working specification — War API, Time Semantics, collection cadence and storage shape integrated 2026-09-19**
 
-This document defines current/future data collection, historical imports, retries, replay, reconciliation and raw-data retention.
+This document defines current/future data collection, historical imports, retries, replay, reconciliation and raw-data retention. Durable archive/backup/recovery rules are defined in [DATA_LIFECYCLE.md](./DATA_LIFECYCLE.md).
 
 Official source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Canonical analytical clock rules are defined in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md). The worker MUST NOT invent stronger guarantees.
 
@@ -87,7 +87,7 @@ No numeric official request-rate limit is documented in the current README, so C
 
 Canonical pipeline:
 
-`schedule -> fetch -> persist fetch metadata -> deduplicate/archive payload -> normalize -> validate -> semantic fingerprint/diff -> source-anomaly gate -> persist sparse source-item evidence -> identity candidate generation -> identity resolution -> persist canonical state evidence -> detect observed changes -> aggregate -> derive metrics -> analytical models -> cache invalidation -> share/export`
+`schedule -> fetch -> persist/durably place raw payload -> persist fetch metadata -> normalize -> validate -> semantic fingerprint/diff -> source-anomaly gate -> persist sparse source-item evidence -> identity candidate generation -> identity resolution -> persist canonical state evidence + outbox -> detect observed changes -> aggregate -> derive metrics -> analytical models -> archive replication/sealing -> cache invalidation -> share/export`
 
 Each stage MUST be replayable from a durable predecessor whenever practical.
 
@@ -154,10 +154,15 @@ On `200`:
 
 1. read response bytes with configured size/time limits;
 2. compute SHA-256 over exact raw response bytes;
-3. upsert content-addressed payload;
-4. record ETag and content hash;
-5. if hash is unchanged for the same semantic endpoint, skip fact mutation;
-6. if changed, normalize, validate and reconcile.
+3. choose payload storage policy (inline or external CAS) without changing payload identity;
+4. for external CAS, durably publish the compressed object **before** committing a PostgreSQL reference;
+5. upsert `source_payloads`;
+6. record ETag/content hash/representation link;
+7. if hash is unchanged for the same semantic endpoint, skip fact mutation;
+8. if changed, normalize, validate and reconcile;
+9. write required downstream/outbox jobs in the same PostgreSQL transaction as canonical mutations.
+
+If an external CAS write succeeds but the DB transaction fails, the resulting unreferenced object is harmless and can be garbage-collected after a grace period. The reverse state — committed DB reference to a missing external payload — MUST NOT occur.
 
 ETag is a transport/cache validator. SHA-256 is Chronicle's durable payload identity.
 
@@ -355,7 +360,7 @@ A quarantined source anomaly:
 
 ## 14. Raw payload retention and storage shape
 
-v1 separates durable replay evidence from query-oriented relational history.
+v1 separates durable replay evidence from query-oriented relational history. Canonical lifecycle rules are in DATA_LIFECYCLE.md.
 
 ### 14.1 Fetch metadata
 
@@ -369,14 +374,21 @@ A future compaction policy MAY be added only if measured storage/maintenance cos
 
 Unique changed official payloads required to replay Chronicle-collected history SHOULD be retained long-term.
 
-Preferred storage:
+One logical payload abstraction supports two storage kinds:
 
-- content-addressed compressed files on persistent storage;
-- hash, byte size, compression, source identity and storage reference in PostgreSQL;
+- **inline** — small exact response bytes in PostgreSQL `bytea`;
+- **external_cas** — larger payloads compressed with Zstandard and referenced from PostgreSQL.
+
+Likely v1 defaults are small war/maps/warReport payloads inline and dynamic/static payloads external, but the threshold is implementation/configuration policy calibrated from real payload measurements.
+
+For every storage kind:
+
+- `content_hash` is SHA-256 of exact original response bytes before compression;
 - 304 responses create metadata only and reference the previously accepted representation;
-- byte-identical 200 responses reuse the existing payload identity.
+- byte-identical 200 responses reuse the existing payload identity;
+- moving/recompressing external payloads does not change source identity.
 
-The old 30-day-hot-only assumption is superseded for replay-critical source payloads. Physical storage tier may become colder later, but content identity and replayability MUST survive.
+Replay-critical raw payloads may move to colder/offsite storage later, but content identity and replayability MUST survive.
 
 ### 14.3 Sparse relational history
 
@@ -537,6 +549,24 @@ Ambiguous cases are reviewable without editing raw evidence.
 
 Manual actions are append-only and reversible. Merge/split/reassignment MUST enqueue downstream invalidation/recomputation.
 
+## 17.3 Transactional outbox and downstream work
+
+Chronicle v1 uses PostgreSQL transactional outbox/lease semantics rather than a separate broker.
+
+When normalization/reconciliation commits a canonical mutation, required downstream jobs MUST commit in the same PostgreSQL transaction.
+
+Typical jobs include:
+
+- identity/coverage recomputation;
+- 15m/1h/1d aggregation;
+- analytical model invalidation/recompute;
+- external raw-payload replication verification;
+- war sealing/export.
+
+Workers SHOULD claim jobs with row locking/leases such as `FOR UPDATE SKIP LOCKED`.
+
+Job handlers MUST be idempotent and tolerate at-least-once execution.
+
 ## 18. War lifecycle handling
 
 New war detection is based on official `warId` within shard.
@@ -563,6 +593,29 @@ else:
 ```
 
 `warNumber` alone MUST NOT trigger a transition.
+
+## 18.1 War close and sealing
+
+War transition handling and historical archival are separate states.
+
+When a valid conquest end is first observed, Chronicle marks the war `soft_closed` rather than immediately considering the archive immutable.
+
+After terminal/source transition reconciliation, enqueue a sealing run.
+
+Sealing MUST verify/finalize:
+
+- source coverage/fetch accounting;
+- final objective/state intervals;
+- final native/15m, 1h and 1d aggregates;
+- required metric/model outputs;
+- existence/integrity of referenced raw payloads;
+- required offsite raw replicas;
+- archive artifacts;
+- versioned archive manifest.
+
+A successful run creates `sealed` archive revision N.
+
+A later accepted source/time/identity correction creates archive revision N+1; it MUST NOT mutate manifest N in place.
 
 ## 19. Backfill and reprocessing
 
@@ -600,6 +653,8 @@ Worker MUST emit:
 - collection profile version and scheduler lag;
 - bytes fetched/stored;
 - compressed raw archive bytes/day;
+- inline raw payload bytes/day;
+- offsite raw-replication lag and verification failures;
 - raw payload item-count distribution;
 - source-item evidence rows/day;
 - PostgreSQL table/index growth by relation;
@@ -611,6 +666,7 @@ Worker MUST emit:
 - mass-collapse quarantines;
 - normalization failures;
 - schema-drift quarantines;
+- outbox depth/oldest age;
 - derived-job lag;
 - reconciliation anomalies;
 - retry/circuit state;
@@ -670,3 +726,10 @@ Before backend feature work depends on ingestion:
 31. A raw-byte-only change with identical semantic fingerprint does not force item-level mutation.
 32. Unchanged map items do not create duplicate relational item rows solely because another snapshot was collected.
 33. Identity reprocessing can reconstruct full occurrences from the raw payload archive.
+34. Small and large raw payloads share one content-identity contract across inline/external storage.
+35. An external payload is durable before its PostgreSQL reference commits.
+36. Downstream work required by a canonical mutation is persisted through the transactional outbox in the same transaction.
+37. Outbox handlers are idempotent under at-least-once execution.
+38. Completed wars pass soft-close/sealing before a sealed archive revision is published.
+39. Sealing verifies referenced raw payloads and offsite replicas.
+40. A late correction creates a new archive revision rather than rewriting a sealed manifest.
