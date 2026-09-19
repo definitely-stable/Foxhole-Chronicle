@@ -123,7 +123,7 @@ Count of qualifying `observed_changes` affecting canonical objectives in a perio
 
 Unit: observed changes.
 
-This metric measures observed churn, not necessarily every in-game capture/destruction that occurred between polls.
+This metric measures observed churn, not necessarily every in-game capture/destruction that occurred between polls. Under `chronicle-collection-v1`, dynamic state is normally sampled at 15-minute cadence; transient `A -> B -> A` states wholly between valid polls are not observable.
 
 ### 3.7 objective_churn_rate
 
@@ -131,7 +131,7 @@ This metric measures observed churn, not necessarily every in-game capture/destr
 
 Unit: observed changes/hour.
 
-Minimum coverage MUST account for polling gaps.
+Minimum coverage MUST account for polling gaps and the expected interval of the active collection profile.
 
 ### 3.8 regional_activity_share
 
@@ -385,6 +385,7 @@ Every metric API value SHOULD include:
 - `coverage_ratio`
 - `sample_count`
 - `resolution_class`
+- `collection_profile_version` when Chronicle-collected cadence affects interpretation
 - `quality_class`
 - `data_as_of`
 - `metric_version`
@@ -440,3 +441,5 @@ A metric is shippable only when:
 12. Boundary-crossing poll intervals are not silently assigned to a day/bucket.
 13. Rates divide by covered elapsed time, not theoretical bucket duration when coverage is incomplete.
 14. Completed duration records use exact elapsed duration rather than rounded day count.
+15. Objective-change/churn metrics identify the collection profile/resolution that bounds what transitions could have been observed.
+16. A cadence change does not silently redefine historical coverage; it creates a new collection profile version.
