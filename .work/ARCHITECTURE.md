@@ -266,14 +266,17 @@ PostgreSQL 18 is the v1 queryable system of record for canonical facts, provenan
 
 No table partitioning is required initially.
 
-Replayable source storage is split deliberately:
+Replayable source storage uses one logical payload abstraction with hybrid physical storage:
 
 1. fetch/validation metadata in PostgreSQL;
-2. unique changed raw payloads in content-addressed compressed persistent storage;
-3. sparse relational item/objective evidence in PostgreSQL;
-4. derived aggregates/models in PostgreSQL.
+2. small exact raw payloads MAY be stored inline in PostgreSQL;
+3. larger replay-heavy payloads use Zstandard-compressed content-addressed storage;
+4. sparse relational item/objective evidence remains in PostgreSQL;
+5. derived aggregates/models remain in PostgreSQL.
 
-Replay-critical raw payloads SHOULD be retained long-term. Physical storage tier may change, but content identity/replayability must survive.
+Replay-critical raw payloads SHOULD be retained long-term and replicated offsite. Physical storage tier may change, but exact content identity/replayability must survive.
+
+PostgreSQL and external raw archive together form one recovery unit: a database restore that references missing replay payloads is degraded recovery.
 
 PostgreSQL MUST NOT duplicate every unchanged map item occurrence on every snapshot merely to preserve replayability. Full matcher/parser replay reconstructs occurrences from archived raw payloads.
 
@@ -287,7 +290,7 @@ The accepted planning baseline is 30 active maps/shard under `chronicle-collecti
 
 This yields 6,072 scheduled regular requests/day/shard before retries, but request count alone is not a DB-size forecast. Storage sizing MUST be based on measured payload sizes, change ratios and relation/index growth.
 
-See [INGESTION.md](./INGESTION.md), [DATA_MODEL.md](./DATA_MODEL.md), and [adr/collection-cadence-and-storage.md](./adr/collection-cadence-and-storage.md).
+See [INGESTION.md](./INGESTION.md), [DATA_MODEL.md](./DATA_MODEL.md), [DATA_LIFECYCLE.md](./DATA_LIFECYCLE.md), [adr/collection-cadence-and-storage.md](./adr/collection-cadence-and-storage.md), and [adr/data-lifecycle-and-recovery.md](./adr/data-lifecycle-and-recovery.md).
 
 ## 12. Reliability model
 
@@ -306,8 +309,11 @@ Operational SLOs SHOULD include:
 - PostgreSQL growth by relation/index;
 - compressed raw archive growth;
 - 200/304 and semantic-change ratios;
+- raw offsite-replication lag;
 - backup freshness;
-- restore success.
+- restore success;
+- last verified restore drill;
+- archive referential-integrity failures.
 
 A guaranteed 99.9% availability claim is inappropriate for a non-redundant single node.
 
@@ -353,6 +359,7 @@ Required test layers:
 - [TIME_SEMANTICS.md](./TIME_SEMANTICS.md)
 - [DATA_MODEL.md](./DATA_MODEL.md)
 - [INGESTION.md](./INGESTION.md)
+- [DATA_LIFECYCLE.md](./DATA_LIFECYCLE.md)
 - [HISTORICAL_DATA.md](./HISTORICAL_DATA.md)
 - [METRICS.md](./METRICS.md)
 - [ANALYTICS.md](./ANALYTICS.md)
@@ -371,8 +378,11 @@ Before writing core backend domain/data code, the following MUST be reviewed and
 - TIME_SEMANTICS.md
 - DATA_MODEL.md
 - INGESTION.md
+- DATA_LIFECYCLE.md
 - OBJECTIVE_IDENTITY.md
 - METRICS.md
 - DATA_LICENSING.md
 
 The backend MUST NOT encode unresolved upstream semantics as irreversible schema assumptions.
+
+Production bootstrap MUST also validate backup/PITR, raw-archive replication, archive integrity checks and a restore drill before Chronicle treats collected history as durable.
