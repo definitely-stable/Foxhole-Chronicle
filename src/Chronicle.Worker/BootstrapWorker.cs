@@ -1,14 +1,13 @@
 namespace Chronicle.Worker;
 
-public sealed class BootstrapWorker(
+public sealed partial class BootstrapWorker(
     ILogger<BootstrapWorker> logger)
     : BackgroundService
 {
     protected override async Task ExecuteAsync(
         CancellationToken stoppingToken)
     {
-        logger.LogInformation(
-            "Chronicle Worker bootstrap is running. Ingestion is intentionally disabled until the first ingestion vertical slice.");
+        LogBootstrapRunning(logger);
 
         try
         {
@@ -17,7 +16,19 @@ public sealed class BootstrapWorker(
         catch (OperationCanceledException)
             when (stoppingToken.IsCancellationRequested)
         {
-            logger.LogInformation("Chronicle Worker bootstrap is stopping.");
+            LogBootstrapStopping(logger);
         }
     }
+
+    [LoggerMessage(
+        EventId = 1000,
+        Level = LogLevel.Information,
+        Message = "Chronicle Worker bootstrap is running. Ingestion is intentionally disabled until the first ingestion vertical slice.")]
+    private static partial void LogBootstrapRunning(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 1001,
+        Level = LogLevel.Information,
+        Message = "Chronicle Worker bootstrap is stopping.")]
+    private static partial void LogBootstrapStopping(ILogger logger);
 }
