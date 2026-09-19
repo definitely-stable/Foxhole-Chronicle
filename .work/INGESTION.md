@@ -764,8 +764,8 @@ Before backend feature work depends on ingestion:
 40. A late correction creates a new archive revision rather than rewriting a sealed manifest.
 41. Logical job identity is stable across retries; request/capture timestamps are not idempotency keys.
 42. Lease generation fences a stale/expired worker from canonical current-state mutation.
-43. HTTP/CAS work is outside PostgreSQL transactions; reconciliation is a short explicit transaction.
-44. Unknown COMMIT outcome is reconciled by stable operation ID before any retry.
+43. HTTP/CAS work is outside PostgreSQL transactions; raw capture and canonical reconciliation are separate short explicit transactions.
+44. Unknown raw-capture COMMIT is reconciled by stable fetch identity; unknown canonical COMMIT is reconciled by deterministic operation_key before any retry/new mutation.
 45. Outbox claim transactions do not remain open while handlers execute.
 46. A crash after outbox effect success and before completion is safe under handler dedup/idempotency.
 47. LISTEN/NOTIFY is never the only durable work signal.
