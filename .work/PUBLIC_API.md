@@ -19,8 +19,21 @@ The API MUST:
 - use stable identifiers;
 - support conditional caching;
 - provide machine-readable errors;
+- remain locale-neutral: stable fields/enums/CSV identifiers MUST NOT vary by UI locale, locale cookie or `Accept-Language`;
 - avoid mirroring raw upstream payloads by default;
 - be usable without a user account for public read operations.
+
+### Localization boundary
+
+The public data API is not localized.
+
+- `/api/v1/*` MUST NOT be nested below `/{locale}`.
+- JSON field names, enum tokens, identifiers, timestamps and CSV column names are culture-invariant machine contracts.
+- `Accept-Language` MUST NOT change the semantic representation of canonical data.
+- Human-facing API documentation MAY be localized in the Next.js UI.
+- Date/number presentation formatting belongs to the UI; canonical timestamps remain ISO-8601 UTC and numeric JSON values remain numeric.
+
+See [LOCALIZATION.md](./LOCALIZATION.md).
 
 ## 2. Core endpoints
 
