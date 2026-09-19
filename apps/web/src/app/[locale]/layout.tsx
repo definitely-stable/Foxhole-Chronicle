@@ -46,7 +46,7 @@ export default async function LocaleLayout({children, params}: Props) {
                 <span>FOXHOLE</span>
                 <span className="brand-muted">CHRONICLE</span>
               </Link>
-              <nav aria-label="Primary navigation">
+              <nav aria-label={t("label")}>
                 <Link href="/">{t("currentWar")}</Link>
                 <Link href="/wars">{t("wars")}</Link>
                 <Link href="/regions">{t("regions")}</Link>
