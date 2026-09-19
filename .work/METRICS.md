@@ -154,6 +154,55 @@ Metrics derived from the official War API MUST follow [WAR_API_SEMANTICS.md](./W
 - objective-change metrics count Chronicle **observed changes** from valid observations; quarantined source anomalies do not count.
 - map/source `version` values are revision metadata, not elapsed time.
 
+## 3.11 Objective identity quality
+
+Every metric that depends on canonical objectives MUST bind to an `identity_resolution_version`.
+
+Define:
+
+`identity_coverage = resolved_eligible_objective_observations / eligible_objective_observations`
+
+The exact denominator is metric-specific and MUST exclude source observations already quarantined for source-level anomalies.
+
+Objective-dependent metric results SHOULD expose:
+
+- `identity_resolution_version`
+- `identity_coverage`
+- `ambiguous_observation_count`
+- `unmatched_observation_count`
+- `manual_override_count` where relevant
+- `identity_quality_class`
+
+Suggested quality classes are policy labels, not probabilities:
+
+- `complete` — all required objective observations resolved under the active identity version;
+- `degraded` — unresolved identity exists but remains below the metric's documented tolerance;
+- `insufficient` — ambiguity/unmatched evidence exceeds the metric's allowed threshold;
+- `reprocessing` — a new identity resolution is being evaluated and the previous result remains active.
+
+Metrics MUST define their own minimum identity coverage; there is no universal threshold.
+
+### Hard-block examples
+
+The following MUST NOT be computed as authoritative when material identity ambiguity remains:
+
+- per-objective recapture records;
+- objective ownership-duration records;
+- objective-specific state-reversal records.
+
+### Degrade examples
+
+The following MAY compute with reduced quality when their versioned definition allows it:
+
+- regional objective churn;
+- Daily Chronicle objective-change count;
+- War Phases inputs;
+- Swing Analysis state index;
+- War DNA objective-volatility dimensions;
+- Similar Wars features derived from objective behavior.
+
+A matcher-version change that reassigns objective observations MUST invalidate only the affected objective-derived metric/model ranges through input fingerprints.
+
 ## 4. Day vs Day metrics
 
 Day-vs-Day uses elapsed war day.
@@ -174,7 +223,7 @@ Comparison metrics SHOULD include:
 - active-region count;
 - optional region concentration.
 
-Each value includes coverage.
+Each value includes source coverage. Objective-derived values additionally include identity coverage and the active identity resolution version.
 
 ## 5. War DNA dimensions
 
@@ -197,8 +246,10 @@ Each dimension returns:
 - raw value;
 - normalized value;
 - cohort percentile;
-- coverage;
-- metric/model versions.
+- source coverage;
+- identity coverage when the dimension depends on objectives;
+- metric/model versions;
+- identity resolution version when applicable.
 
 No single "overall war score" is required.
 
@@ -296,6 +347,8 @@ Every metric API value SHOULD include:
 - `quality_class`
 - `data_as_of`
 - `metric_version`
+- `identity_resolution_version` when objective-derived
+- `identity_coverage` when objective-derived
 
 "Confidence" MUST not be a decorative percentage. Use categorical quality/confidence only when derived from a documented rule.
 
@@ -338,3 +391,5 @@ A metric is shippable only when:
 6. golden tests exist;
 7. API includes provenance/coverage;
 8. UI wording does not overstate what the metric proves.
+9. Objective-derived metrics declare identity-resolution dependencies and minimum identity coverage.
+10. Matcher reprocessing invalidates affected derived results deterministically.
