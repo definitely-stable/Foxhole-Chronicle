@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "api:generate": "openapi-typescript ../../artifacts/openapi/app.json -o src/api/generated/schema.d.ts"
+    "api:generate": "openapi-typescript ../../artifacts/openapi/app_app.json -o src/api/generated/schema.d.ts"
   },
   "dependencies": {
     "@formatjs/intl-localematcher": "0.9.0",
