@@ -49,9 +49,11 @@ SSR/RSC/UI               authoritative REST
            PostgreSQL
                 ^
                 |
-        Ingestion Worker
-                |
-        allowed data sources
+        Ingestion Worker --------> Raw Payload Store
+                |                  inline + Zstd CAS
+                |                         |
+        allowed data sources              v
+                                  verified offsite archive
 ```
 
 The API and Worker share application/domain/data contracts, but run as separate processes so source failures and long-running collection jobs do not block web requests.
@@ -160,24 +162,38 @@ Owns:
 - scheduling;
 - HTTP fetches;
 - historical imports;
-- raw payload dedup;
+- exact raw-payload placement/dedup;
 - normalization;
 - reconciliation;
+- transactional outbox processing;
 - observed-change detection;
 - aggregates;
-- analytical model recomputation.
+- analytical model recomputation;
+- raw offsite replication/verification;
+- war sealing and archive-export generation.
 
 ### PostgreSQL
 
 Owns:
 
 - canonical facts;
-- source provenance;
+- source provenance/fetch metadata;
+- small inline raw payloads;
 - current and historical state;
 - aggregates;
 - metric/model results;
-- share/export manifests;
-- job/lease state.
+- archive/share/export manifests;
+- outbox/job/lease state.
+
+### Raw payload store
+
+Owns:
+
+- large exact replay payloads under content-addressed identity;
+- local durable CAS/cache;
+- independently verified offsite replicas.
+
+PostgreSQL metadata and the raw payload store are jointly required for complete historical recovery.
 
 ## 6. Data semantics
 
