@@ -206,15 +206,21 @@ A batch groups collection work but is **not** an atomic world snapshot.
 - `ingestion_job_id uuid NOT NULL FK`
 - `attempt_no integer NOT NULL`
 - `lease_generation bigint NOT NULL`
+- `endpoint_fence_token bigint NULL`
 - `worker_id text NOT NULL`
 - `state text NOT NULL`
 - `started_at timestamptz NOT NULL`
+- `raw_durable_at timestamptz NULL`
 - `completed_at timestamptz NULL`
 - `failure_class text NULL`
 - `retryable boolean NULL`
 - `worker_build text NOT NULL`
 
 Unique: `(ingestion_job_id, attempt_no)`.
+
+`endpoint_fence_token` is populated only after the attempt acquires endpoint ownership. The semantic endpoint row is resolved from the logical job's source/shard/endpoint/profile key; attempts do not hold a reverse FK to `endpoint_poll_state`, avoiding a cyclic FK with `endpoint_poll_state.lease_owner_attempt_id`.
+
+`raw_durable_at` records the durable checkpoint after the raw-capture transaction commits; it MUST NOT be set merely because an HTTP response was received.
 
 `endpoint_poll_state` owns scheduling/cache eligibility and the **endpoint-level execution fence** for one semantic endpoint. Job ownership and endpoint mutation ownership are separate concerns.
 
@@ -236,7 +242,14 @@ Unique: `(ingestion_job_id, attempt_no)`.
 - `fence_token bigint NOT NULL DEFAULT 0`
 - `updated_at timestamptz NOT NULL`
 
-Unique: `(source_id, shard, endpoint_key, collection_profile_version)` with null-safe shard treatment in the concrete migration.
+Required uniqueness:
+
+~~~sql
+UNIQUE NULLS NOT DISTINCT
+(source_id, shard, endpoint_key, collection_profile_version)
+~~~
+
+PostgreSQL's default UNIQUE semantics treat NULL values as distinct; Chronicle MUST use `NULLS NOT DISTINCT` here because duplicate shardless endpoint rows would create duplicate endpoint fences. Official War API runtime rows always carry a shard; nullable shard exists only for source classes whose semantics are legitimately shardless.
 
 Claiming endpoint execution increments `fence_token` atomically and records the owning attempt. An ingestion job's `lease_generation` protects ownership of that logical job only; it MUST NOT be reused as the endpoint mutation fence.
 
@@ -257,11 +270,21 @@ Claiming endpoint execution increments `fence_token` atomically and records the 
 - `last_changed_at timestamptz NULL`
 - `updated_at timestamptz NOT NULL`
 
-Unique: `(source_id, shard, endpoint_key, collection_profile_version)` with null-safe shard treatment in the concrete migration.
+Required uniqueness:
+
+~~~sql
+UNIQUE NULLS NOT DISTINCT
+(source_id, shard, endpoint_key, collection_profile_version)
+~~~
+
+The endpoint cursor and endpoint poll-state tables MUST use identical semantic-key null treatment.
 
 `reconciliation_operations` is the idempotency ledger for canonical write transactions.
 
-- `operation_id uuid PK`
+- `operation_id uuid PK` — physical UUIDv7 row identity
+- `operation_key text UNIQUE NOT NULL` — deterministic idempotency identity
+- `operation_kind text NOT NULL` — `canonical_ingest` in v1
+- `input_fingerprint char(64) NOT NULL`
 - `ingestion_attempt_id uuid NOT NULL FK`
 - `endpoint_cursor_id uuid NOT NULL FK`
 - `fetch_id uuid NULL`
@@ -273,7 +296,11 @@ Unique: `(source_id, shard, endpoint_key, collection_profile_version)` with null
 - `created_at timestamptz NOT NULL`
 - `committed_at timestamptz NULL`
 
-The stable `operation_id`, endpoint cursor fence and unique constraints are authoritative for retry reconciliation. PostgreSQL transaction ID/status is supplemental evidence, not the sole idempotency mechanism.
+For v1 canonical ingestion:
+
+`operation_key = "canonical_ingest:" + fetch_id`
+
+The deterministic `operation_key`, endpoint cursor fence and unique constraints are authoritative for retry/restart reconciliation. Lease/fence values are provenance/authorization checks, not part of operation identity. `input_fingerprint` records the interpretation/version set that actually committed. `operation_id` is physical identity and MUST NOT be the only way to rediscover the same intended operation after process loss. PostgreSQL transaction ID/status is supplemental evidence, not the sole idempotency mechanism.
 
 ### 4.4 Fetch metadata
 
@@ -307,11 +334,13 @@ The stable `operation_id`, endpoint cursor fence and unique constraints are auth
 - `outcome text NOT NULL`
 - `error_code text NULL`
 
-A fetch is one HTTP interaction. A `304` MUST NOT create a duplicate normalized observation, but SHOULD reference the previously accepted representation through `representation_payload_id` so coverage can use the validation instant. Request/capture timestamps are evidence, not idempotency keys.
+A fetch is one HTTP interaction. v1 enforces `UNIQUE (ingestion_attempt_id)`: one ingestion attempt performs at most one audited HTTP exchange. A source retry creates a new attempt/fetch under the same logical job.
+
+A `304` MUST NOT create a duplicate normalized observation, but SHOULD reference the previously accepted representation through `representation_payload_id` so coverage can use the validation instant. Request/capture timestamps are evidence, not idempotency keys.
 
 A successful HTTP response that Chronicle intends to preserve crosses the **raw-durable boundary** when its `source_fetches` evidence and exact `source_payloads` reference/bytes have committed in a short raw-capture transaction. Canonical normalization/reconciliation happens in a later short transaction. This prevents a Worker crash after receiving a transient response from erasing the only Chronicle copy of that source state.
 
-The relationship is one-way: a fetch MAY participate in multiple reconciliation/reprocessing operations over time. `reconciliation_operations.fetch_id` owns that linkage; `source_fetches` MUST NOT hold a back-reference to one reconciliation operation.
+The relationship is one-way: a fetch has at most one v1 `canonical_ingest` reconciliation operation, enforced by deterministic `operation_key`. Later explicit reprocessing may reference the same fetch through its own versioned run/evidence records. `reconciliation_operations.fetch_id` owns the canonical-ingest linkage; `source_fetches` MUST NOT hold a back-reference to one reconciliation operation.
 
 ### 4.5 Raw payloads
 
@@ -479,7 +508,8 @@ Fields:
 - `source_map_name text NOT NULL`
 - `source_item_kind text NOT NULL`
 - `evidence_reason text NOT NULL`
-- `source_array_ordinal integer NULL`
+- `source_occurrence_no integer NOT NULL` — Chronicle-assigned 0-based occurrence number within one payload/source_item_kind
+- `source_array_ordinal integer NULL` — optional raw/original array position evidence
 - `icon_type_raw integer NULL`
 - `team_id_raw text NULL`
 - `flags_raw bigint NULL`
@@ -492,13 +522,15 @@ Fields:
 - `normalized_family text NULL`
 - `created_at timestamptz NOT NULL`
 
-Recommended uniqueness:
+Required uniqueness:
 
-`(map_observation_id, source_item_kind, source_array_ordinal, evidence_reason)`
+`(map_observation_id, source_item_kind, source_occurrence_no, evidence_reason)`
 
-When `source_array_ordinal` is unavailable, the parser MUST assign another deterministic payload-local occurrence discriminator so two byte/field-identical occurrences in one immutable payload cannot collapse into one relational evidence row.
+The parser MUST deterministically assign `source_occurrence_no` while traversing the immutable payload. It is deliberately payload-local and may change between two source payloads because upstream array ordering is not a stable cross-observation identity.
 
-`source_array_ordinal` is payload-local occurrence evidence only and MUST NOT participate in canonical objective matching across observations. Source occurrence identity and canonical objective identity are separate concepts.
+`source_array_ordinal`, when retained, is raw/original payload evidence only. Neither ordinal participates in canonical objective matching across observations. Two byte/field-identical occurrences in one payload remain distinct because they have different `source_occurrence_no` values.
+
+Source occurrence identity and canonical objective identity are separate concepts.
 
 An unchanged item present in another valid snapshot MUST NOT create a new row solely because another poll occurred. Its continued state/coverage is represented through valid map snapshot/304 coverage evidence.
 
@@ -602,9 +634,36 @@ Unknown icon codes and flag bits MUST survive losslessly.
 - `first_observed_at timestamptz NOT NULL`
 - `last_observed_at timestamptz NOT NULL`
 - `next_state_first_observed_at timestamptz NULL`
+- `sequence_range tstzrange GENERATED ALWAYS AS (tstzrange(first_observed_at, next_state_first_observed_at, '[)')) STORED`
 - `coverage_ratio numeric NULL`
 - `quality_class text NOT NULL`
 - `created_at timestamptz NOT NULL`
+
+Required checks:
+
+~~~text
+first_observed_at <= last_observed_at
+next_state_first_observed_at IS NULL
+  OR last_observed_at < next_state_first_observed_at
+~~~
+
+`sequence_range` is a **structural chronology range**, not a claim that the owner/state was continuously known throughout that entire range. The uncertain tail between `last_observed_at` and a different next state remains governed by replay/change uncertainty semantics.
+
+PostgreSQL 18 migration baseline:
+
+~~~sql
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+UNIQUE (
+    objective_id,
+    war_id,
+    identity_resolution_version,
+    state_version,
+    sequence_range WITHOUT OVERLAPS
+)
+~~~
+
+This enforces non-overlapping accepted interval chronology for one objective/version, including at most one open-ended interval. It does not convert polling gaps into confirmed truth.
 
 ### 6.6 Observed changes
 
@@ -650,15 +709,21 @@ Replay uses:
 - coverage_segments for confidence/availability;
 - war/map observations and raw evidence for traceability/reprocessing.
 
-Baseline replay state classification for selected instant `at`:
+Replay returns an observed state value separately from an evidence class.
 
-- `confirmed_observed`: Chronicle has accepted supporting state under the active coverage semantics at that instant;
-- `transition_uncertain`: a known state-change interval has `previous_observed_at < at < current_observed_at`, so the exact transition point is not known;
-- `no_coverage`: no sufficient accepted evidence supports a replay state.
+Baseline `replayEvidenceClass` values for selected instant `at`:
 
-At exactly `previous_observed_at`, the previous state is an actual observation. At exactly `current_observed_at`, the current state is an actual observation. The open interior between different-state endpoints is the transition-uncertain window.
+- `observed_exact` — `at` is an accepted observation/representation-validation checkpoint for that state;
+- `supported_continuity` — valid bracketing evidence supports the same accepted state and the coverage policy considers the interval usable, while transient unobserved changes still cannot be ruled out;
+- `transition_uncertain` — valid bounding evidence has different states and `previous_observed_at < at < current_observed_at`;
+- `last_known` — there is no later valid bound yet, but a previous accepted state remains within the endpoint's documented freshness horizon;
+- `no_coverage` — Chronicle lacks sufficient accepted evidence for the selected instant.
 
-This classification MUST NOT imply that no hidden A -> B -> A transition occurred between two same-state polls; it expresses Chronicle's accepted observed-history/coverage model, not omniscient game truth.
+At exactly `previous_observed_at`, the previous state is `observed_exact`. At exactly `current_observed_at`, the current state is `observed_exact`. The open interior between different-state endpoints is `transition_uncertain`.
+
+`supported_continuity` means "the accepted representation/state was consistently supported by Chronicle's samples", not "Chronicle proved nothing changed between samples". A hidden A -> B -> A transition may exist entirely between same-state polls.
+
+`last_known` MUST carry age/freshness metadata and MUST become `no_coverage` after the configured evidence horizon. These classes express Chronicle's observed-history model, not omniscient game truth.
 
 The replay API SHOULD compute baseline state from canonical intervals/changes first.
 

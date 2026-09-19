@@ -52,6 +52,7 @@ See:
 ├── ANALYTICS.md
 ├── OBJECTIVE_IDENTITY.md
 ├── PUBLIC_API.md
+├── MAP_PRESENTATION.md
 ├── LOCALIZATION.md
 ├── WEB_RUNTIME.md
 ├── PLATFORM_DEPENDENCIES.md
@@ -100,17 +101,22 @@ This index does not add a new documentation CI/gate policy.
 
 ## Core product implementation order
 
-The P0 vertical path is intentionally product-first:
+The P0 vertical path is intentionally product-first and begins with two parallel tracks:
 
 ~~~text
-War API
-  -> durable source observations
-  -> current war identity/state
-  -> Timeline foundation
-  -> objective historical state
-  -> Replay projection
-  -> unified Current War / Timeline / Replay web experience
+Track A                         Track B
+war + warReport                 static/dynamic collection
+  -> Current War                  -> labeled objective corpus
+  -> Timeline counters            -> matcher calibration/golden fixtures
+                 \              /
+                  objective history
+                        ->
+                      Replay
+                        ->
+        unified Current War / Timeline / Replay
 ~~~
+
+Production objective Replay MUST NOT bypass the objective-identity calibration gate by guessing thresholds.
 
 Do not implement Compare/Records/DNA/Phases first and postpone the product's central Timeline/Replay experience.
 
@@ -155,7 +161,7 @@ Chronicle MUST NOT:
 - treat map `lastUpdated` as an item-level event timestamp;
 - show Replay as omniscient exact history when Chronicle only has bounded observations.
 
-Replay therefore distinguishes confirmed observed state, transition uncertainty and insufficient coverage.
+Replay therefore separates state value from evidence strength and distinguishes observed_exact, supported_continuity, transition_uncertain, last_known and no_coverage.
 
 ## Current architecture status
 
@@ -163,7 +169,7 @@ Replay therefore distinguishes confirmed observed state, transition uncertainty 
 
 The War API source-semantics contract is materialized in `WAR_API_SEMANTICS.md`.
 
-Objective identity research is integrated into `OBJECTIVE_IDENTITY.md`, `DATA_MODEL.md`, `INGESTION.md`, `METRICS.md`, `ANALYTICS.md` and `PUBLIC_API.md`. Production matcher thresholds remain intentionally uncommitted until calibration against a labeled real-payload corpus.
+Objective identity research is integrated into `OBJECTIVE_IDENTITY.md`, `DATA_MODEL.md`, `INGESTION.md`, `METRICS.md`, `ANALYTICS.md` and `PUBLIC_API.md`. Production matcher thresholds remain intentionally uncommitted until calibration against a labeled real-payload corpus; collecting/calibrating that corpus is now an explicit early P0 workstream.
 
 ### Time semantics
 
@@ -194,7 +200,9 @@ Logical ingestion job ownership and endpoint mutation ownership are separate:
 - `ingestion_jobs.lease_generation` protects logical job ownership;
 - `endpoint_poll_state.fence_token` independently fences stale endpoint mutators.
 
-Received 200-response evidence crosses the raw-durable boundary before canonical reconciliation. Unknown COMMIT outcomes are reconciled by stable logical identities rather than blindly replayed as new operations.
+Received 200-response evidence crosses the raw-durable boundary before canonical reconciliation. The protocol is: logical-job claim -> endpoint-fence claim -> one audited HTTP exchange -> raw-capture COMMIT -> canonical reconciliation COMMIT.
+
+Unknown COMMIT outcomes are reconciled by stable fetch identity or deterministic reconciliation operation_key rather than blindly replayed as new operations.
 
 ### Platform baseline
 
@@ -208,7 +216,7 @@ The implementation baseline now includes:
 - .NET 10 / C# 14;
 - EF Core 10 + Npgsql 10;
 - NodaTime + TimeProvider;
-- PostgreSQL 18 + pg_stat_statements;
+- PostgreSQL 18 + pg_stat_statements + btree_gist for temporal interval constraints;
 - OpenTelemetry / OTLP;
 - Testcontainers, Playwright and the testing stack documented in `TESTING.md`.
 
@@ -224,7 +232,7 @@ Launch UI locales:
 - fr;
 - pt-BR.
 
-UI routes are locale-prefixed; the machine API remains locale-neutral.
+UI routes are locale-prefixed. The P0 first-party machine API is locale-neutral under /api/app; stable external /api/v1 publication is P1.
 
 See `LOCALIZATION.md`.
 
@@ -233,6 +241,8 @@ See `LOCALIZATION.md`.
 Current War, War Timeline and War Replay are now the explicit product core.
 
 Replay is a read projection over the same canonical history as Timeline; no replay-only source-of-truth store is introduced.
+
+Replay map coordinates/layout are versioned presentation metadata defined in `MAP_PRESENTATION.md`; renderer code must not invent undocumented source-coordinate guarantees.
 
 Detailed semantics/API/UI/acceptance criteria are in `CORE_WAR_EXPERIENCE.md`.
 

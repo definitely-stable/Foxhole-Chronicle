@@ -1,20 +1,34 @@
-# Foxhole Chronicle — Public Data API
+# Foxhole Chronicle — Application and Public Data API
 
 Status: **Authoritative working specification**
 
-Chronicle is both a website and a public normalized-data provider.
+Chronicle has two API lifecycle surfaces.
+
+### P0 first-party application API
 
 Base path:
 
+`/api/app`
+
+This is the transport contract between Chronicle.Api and the first-party Next.js application. It is OpenAPI-described and type-generated, but it is **not an external compatibility promise** before the P1 public API launch. Web/API changes land atomically in the same PR when this contract changes.
+
+### P1 stable public data API
+
+Reserved base path:
+
 `/api/v1`
 
-OpenAPI 3.1 is the canonical machine-readable contract.
+Selected normalized resources may be published here after real P0 response shapes, performance and abuse characteristics are validated. Once an endpoint is published under `/api/v1`, the documented compatibility/deprecation policy applies.
 
-ASP.NET Core 10 first-party OpenAPI generation is the source of that document. Chronicle SHOULD generate the public v1 OpenAPI document at build time with Microsoft.Extensions.ApiDescription.Server so frontend type generation and contract tests do not require starting the API process.
+The first-party application MUST NOT depend on a public-v1 stability freeze merely to call its own backend.
+
+OpenAPI 3.1 is the canonical machine-readable contract for both surfaces when present.
+
+ASP.NET Core 10 first-party OpenAPI generation is the source. Chronicle SHOULD generate the application OpenAPI document at build time with Microsoft.Extensions.ApiDescription.Server so frontend type generation and contract tests do not require starting the API process.
 
 ## 1. Principles
 
-The API MUST:
+The normalized API contracts MUST:
 
 - expose normalized Chronicle entities and derived analytics;
 - preserve source/provenance/coverage;
@@ -27,9 +41,9 @@ The API MUST:
 
 ### Localization boundary
 
-The public data API is not localized.
+Neither API surface is localized.
 
-- `/api/v1/*` MUST NOT be nested below `/{locale}`.
+- `/api/app/*` and future `/api/v1/*` MUST NOT be nested below `/{locale}`.
 - JSON field names, enum tokens, identifiers, timestamps and CSV column names are culture-invariant machine contracts.
 - `Accept-Language` MUST NOT change the semantic representation of canonical data.
 - Human-facing API documentation MAY be localized in the Next.js UI.
@@ -39,11 +53,11 @@ See [LOCALIZATION.md](./LOCALIZATION.md).
 
 ### Frontend contract generation
 
-The first-party Next.js client uses:
+The first-party Next.js client uses the **application** contract:
 
 ~~~text
-ASP.NET Core endpoint metadata
-  -> build-time OpenAPI 3.1
+ASP.NET Core /api/app endpoint metadata
+  -> build-time application OpenAPI 3.1
   -> openapi-typescript
   -> generated TypeScript transport types
   -> openapi-fetch
@@ -64,69 +78,84 @@ See [PLATFORM_DEPENDENCIES.md](./PLATFORM_DEPENDENCIES.md) and [WEB_RUNTIME.md](
 
 ### Current War
 
-- `GET /api/v1/shards/{shard}/current`
-- `GET /api/v1/status`
-- `GET /api/v1/sources`
+- `GET /api/app/shards/{shard}/current`
+- `GET /api/app/status`
+- `GET /api/app/sources`
 
 The shard current response SHOULD identify the canonical Chronicle war UUID so the UI can move from Current War into the canonical Timeline/Replay workspace without relying on unqualified war number.
 
 Current War is a projection of the same canonical history used by Timeline and Replay. It MUST NOT maintain a separate live-only truth model.
 
-A future aggregate `GET /api/v1/current` MAY return a collection of current wars across shards, but it MUST NOT imply one globally unique current war.
+A future aggregate `GET /api/app/current` MAY return a collection of current wars across shards, but it MUST NOT imply one globally unique current war.
+
+Equivalent resources MAY later be selected for stable publication under `/api/v1`; publication is an explicit P1 decision, not automatic mirroring of every application endpoint.
 
 ### Wars
 
 Canonical machine resource identity uses immutable Chronicle war UUID:
 
-- `GET /api/v1/wars/{chronicleWarId}`
-- `GET /api/v1/wars/{chronicleWarId}/timeline`
-- `GET /api/v1/wars/{chronicleWarId}/replay/manifest`
-- `GET /api/v1/wars/{chronicleWarId}/replay/state?at={utcInstant}`
-- `GET /api/v1/wars/{chronicleWarId}/replay/changes?from={utcInstant}&to={utcInstant}&after={cursor}&limit={n}`
-- `GET /api/v1/wars/{chronicleWarId}/days/{day}` — `{day}` is Chronicle 1-based elapsed war day
-- `GET /api/v1/wars/{chronicleWarId}/regions`
-- `GET /api/v1/wars/{chronicleWarId}/regions/{region}`
-- `GET /api/v1/wars/{chronicleWarId}/dna`
-- `GET /api/v1/wars/{chronicleWarId}/similar`
-- `GET /api/v1/wars/{chronicleWarId}/phases`
-- `GET /api/v1/wars/{chronicleWarId}/swings`
+- `GET /api/app/wars/{chronicleWarId}`
+- `GET /api/app/wars/{chronicleWarId}/timeline`
+- `GET /api/app/wars/{chronicleWarId}/replay/manifest`
+- `GET /api/app/wars/{chronicleWarId}/replay/state?at={utcInstant}`
+- `GET /api/app/wars/{chronicleWarId}/replay/changes?from={utcInstant}&to={utcInstant}&after={cursor}&limit={n}`
+- `GET /api/app/wars/{chronicleWarId}/days/{day}` — `{day}` is Chronicle 1-based elapsed war day
+- `GET /api/app/wars/{chronicleWarId}/regions`
+- `GET /api/app/wars/{chronicleWarId}/regions/{region}`
+- `GET /api/app/wars/{chronicleWarId}/dna`
+- `GET /api/app/wars/{chronicleWarId}/similar`
+- `GET /api/app/wars/{chronicleWarId}/phases`
+- `GET /api/app/wars/{chronicleWarId}/swings`
 
 Lookup/convenience endpoints are explicitly shard-aware:
 
-- `GET /api/v1/wars`
-- `GET /api/v1/shards/{shard}/wars/{warNumber}`
+- `GET /api/app/wars`
+- `GET /api/app/shards/{shard}/wars/{warNumber}`
 
 `warNumber` MUST NOT be accepted as an unqualified canonical `{war}` path identifier because it is shard-scoped.
 
 ### Compare
 
-- `GET /api/v1/compare?wars=...`
-- `GET /api/v1/compare/days?day=17&wars=...&partialMode=partial_as_is|like_for_like_fraction`
+- `GET /api/app/compare?wars=...`
+- `GET /api/app/compare/days?day=17&wars=...&partialMode=partial_as_is|like_for_like_fraction`
 
 ### Objectives
 
-- `GET /api/v1/objectives/{objective}`
-- `GET /api/v1/objectives/{objective}/history`
-- `GET /api/v1/objectives/{objective}/revisions`
+- `GET /api/app/objectives/{objective}`
+- `GET /api/app/objectives/{objective}/history`
+- `GET /api/app/objectives/{objective}/revisions`
 
 Objective identifiers in public routes resolve through canonical Chronicle identity/alias rules. A superseded alias SHOULD redirect or resolve to the surviving canonical objective without breaking old links.
 
 ### Records
 
-- `GET /api/v1/records`
+- `GET /api/app/records`
 
 ### Changes/events
 
 Phase 2:
 
-- `GET /api/v1/changes`
-- `GET /api/v1/changes/stream` via SSE if adopted
+- `GET /api/app/changes`
+- `GET /api/app/changes/stream` via SSE if adopted
 
 ## 3. Timeline query
 
 Example:
 
-`GET /api/v1/wars/{chronicleWarId}/timeline?metric=casualties&from=...&to=...&resolution=auto`
+`GET /api/app/wars/{chronicleWarId}/timeline?series=casualties,regional_casualty_rate,objective_changes,coverage&from=...&to=...&resolution=auto`
+
+Timeline is a **composite temporal surface**. One request MAY return multiple independently sourced series/events needed by the page.
+
+P0 series keys include registered metrics/event layers only, for example:
+
+- `casualties`;
+- `casualty_rate`;
+- `regional_casualty_rate`;
+- `objective_changes`;
+- `observed_control` when its registered metric definition/identity quality permits;
+- `coverage`.
+
+There is no opaque `regional_activity` series unless METRICS.md later registers an explicit formula/version.
 
 Supported generic resolution contract:
 
@@ -140,7 +169,22 @@ Under `chronicle-collection-v1`, ordinary warReport/dynamic-derived high resolut
 
 A finer resolution such as `5m` MAY exist only for a metric/dataset whose actual supporting observations permit it. Chronicle MUST NOT upsample 15m evidence and label it 5m data.
 
-A requested resolution MAY be rejected/downgraded if source/collection/historical coverage cannot support it. The response MUST state effective resolution and collection profile.
+A requested resolution MAY be rejected/downgraded if source/collection/historical coverage cannot support it. Resolution is evaluated per series: one series may legitimately have 5-minute source evidence while another is 15-minute/native.
+
+A Timeline response MUST expose:
+
+- `querySnapshotAt` — when Chronicle assembled the response;
+- `warTimeRevision`;
+- a stable response/query fingerprint or equivalent revision metadata useful for caching;
+- per-series `dataAsOf`;
+- per-series `nativeResolution` and `effectiveResolution`;
+- per-series collection/source profile where relevant;
+- per-series coverage and quality;
+- identity resolution metadata for objective-derived series.
+
+The response MUST NOT imply that asynchronously collected source series were observed simultaneously merely because they are returned in one HTTP response.
+
+If response assembly uses multiple PostgreSQL statements, v1 SHOULD use one short read-only coherent database snapshot (for example a REPEATABLE READ transaction) or an equivalent single-snapshot query plan so one response does not mix database revisions during assembly. This database-snapshot guarantee does not create false simultaneity between upstream sources.
 
 Timeline is the central war-history query surface. Observed changes returned for Timeline MUST retain `previousObservedAt` / `currentObservedAt` uncertainty semantics rather than expose a fabricated exact event timestamp.
 
@@ -150,7 +194,7 @@ Replay is an observed-history projection over the same canonical data as Timelin
 
 ### Manifest
 
-`GET /api/v1/wars/{chronicleWarId}/replay/manifest`
+`GET /api/app/wars/{chronicleWarId}/replay/manifest`
 
 The manifest SHOULD contain stable/slow-changing metadata required to render Replay efficiently:
 
@@ -160,13 +204,15 @@ The manifest SHOULD contain stable/slow-changing metadata required to render Rep
 - available replay/coverage bounds;
 - identity resolution version;
 - relevant archive/data revision;
-- map/static metadata required by the current replay renderer.
+- map/static metadata required by the current replay renderer;
+- `mapLayoutVersion` and `rendererContractVersion`;
+- per-region `regionTransformVersion` / presentation bounds required by MAP_PRESENTATION.md.
 
 For sealed wars the manifest MAY use long-lived caching.
 
 ### State at selected instant
 
-`GET /api/v1/wars/{chronicleWarId}/replay/state?at={utcInstant}`
+`GET /api/app/wars/{chronicleWarId}/replay/state?at={utcInstant}`
 
 `at` is an absolute UTC instant. The UI derives elapsed Day N/time from canonical war-time semantics.
 
@@ -175,27 +221,33 @@ Each replay item SHOULD include:
 - canonical objective/region identity;
 - position;
 - observed owner/state where supported;
-- `replayStateClass`;
-- supporting/bounding observations;
+- `replayEvidenceClass`;
+- supporting/bounding observations/validations;
 - coverage/quality;
 - identity resolution version;
 - applicable data/time revision metadata.
 
-Baseline `replayStateClass` values:
+Baseline `replayEvidenceClass` values:
 
-- `confirmed_observed`;
+- `observed_exact`;
+- `supported_continuity`;
 - `transition_uncertain`;
+- `last_known`;
 - `no_coverage`.
+
+State value and evidence class are separate. `supported_continuity` does not prove that no transient change occurred entirely between polls. `last_known` MUST include freshness age/horizon and expires into `no_coverage`.
 
 If Chronicle knows only that a state changed in `(previousObservedAt, currentObservedAt]`, a selected instant inside that unresolved transition window MUST NOT be assigned an interpolated exact state.
 
 ### Replay change range
 
-`GET /api/v1/wars/{chronicleWarId}/replay/changes?from={utcInstant}&to={utcInstant}&after={cursor}&limit={n}`
+`GET /api/app/wars/{chronicleWarId}/replay/changes?from={utcInstant}&to={utcInstant}&after={cursor}&limit={n}`
 
 This returns ordered accepted observed-change records for client playback.
 
-Every record preserves its observation interval; ordering for deterministic transport/playback MUST NOT be misrepresented as exact in-game event ordering when uncertainty windows overlap.
+Every record preserves its observation interval and includes `reconstructionBoundaryAt = currentObservedAt`. That boundary is when the newly observed state becomes applicable to Chronicle reconstruction; it is NOT an asserted event timestamp.
+
+Ordering is deterministic for transport/reconstruction, using a stable tie-break such as `currentObservedAt, objectiveId, changeId`; it MUST NOT be described as exact in-game event ordering when uncertainty windows overlap.
 
 The endpoint uses cursor pagination for large ranges.
 
@@ -203,13 +255,13 @@ The endpoint uses cursor pagination for large ranges.
 
 For a supported point/range, a direct replay state query and:
 
-`baseline replay state + ordered accepted replay changes`
+`baseline replay state + ordered accepted replay changes + uncertainty windows + coverage/freshness evidence`
 
-SHOULD reconstruct the same Chronicle-observed state under the documented coverage/uncertainty semantics.
+SHOULD reconstruct the same Chronicle-observed state **and replayEvidenceClass** under the documented semantics.
 
 The browser MUST NOT fetch a full state snapshot for every animation frame.
 
-See [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md).
+See [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md) and [MAP_PRESENTATION.md](./MAP_PRESENTATION.md).
 
 ## 4. Envelope metadata
 
@@ -256,7 +308,7 @@ These values describe Chronicle identity resolution quality; they are not source
 
 ## 4.1 Objective History contract
 
-`GET /api/v1/objectives/{objective}/history` SHOULD return:
+`GET /api/app/objectives/{objective}/history` SHOULD return:
 
 - immutable canonical objective ID;
 - canonical key;
@@ -323,7 +375,7 @@ Avoid ambiguous public fields such as `day`, `warDay`, `timestamp`, `lastUpdated
 
 ### Day endpoint
 
-`GET /api/v1/wars/{chronicleWarId}/days/{day}` MUST identify:
+`GET /api/app/wars/{chronicleWarId}/days/{day}` MUST identify:
 
 - requested elapsed day;
 - effective interval;
@@ -363,7 +415,7 @@ Large chronological collections MUST use cursor pagination.
 
 Example:
 
-`GET /api/v1/changes?after={cursor}&limit=100`
+`GET /api/app/changes?after={cursor}&limit=100`
 
 Do not use page-number pagination for continuously appended event/change streams.
 
@@ -402,18 +454,20 @@ Rate-limit responses MUST return `429` and retry metadata.
 
 First-party browser traffic is same-origin through Caddy.
 
-Public API MAY expose permissive GET CORS for documented read-only endpoints after abuse/cost review.
+The P0 `/api/app` surface is same-origin first-party transport and SHOULD NOT enable permissive cross-origin CORS by default.
 
-Mutation/admin endpoints MUST NOT share the same public CORS policy.
+The P1 `/api/v1` public API MAY expose permissive GET CORS for explicitly published read-only endpoints after abuse/cost review.
+
+Mutation/admin endpoints MUST NOT share the public read CORS policy.
 
 ## 10. CSV
 
 CSV endpoints SHOULD be explicit, for example:
 
-- `GET /api/v1/wars/{chronicleWarId}/timeline.csv?... `
-- `GET /api/v1/wars/{chronicleWarId}/days.csv`
-- `GET /api/v1/objectives/{objective}/history.csv`
-- `GET /api/v1/exports/{dataset}.csv`
+- `GET /api/app/wars/{chronicleWarId}/timeline.csv?... `
+- `GET /api/app/wars/{chronicleWarId}/days.csv`
+- `GET /api/app/objectives/{objective}/history.csv`
+- `GET /api/app/exports/{dataset}.csv`
 
 Every CSV export MUST document:
 
@@ -431,18 +485,27 @@ Large bulk datasets MAY be prepared as immutable export artifacts with an export
 
 For sealed wars, Parquet + ZSTD MAY be published as a bulk analytical projection alongside CSV where useful. Parquet is not the request-time source of truth and MUST identify archive revision, schema/version metadata, collection profile and content hash.
 
-## 11. Public OpenAPI
+## 11. OpenAPI and lifecycle
+
+P0 application contract:
+
+- `GET /api/openapi/app.json`
+- developer/internal interactive reference MAY expose the application document
+
+The frontend TypeScript client SHOULD be generated from the application OpenAPI during CI.
+
+P1 public contract, once launched:
 
 - `GET /api/openapi/v1.json`
-- `/api/docs` interactive/reference docs
+- public `/api/docs` reference
 
-The frontend TypeScript client SHOULD be generated from OpenAPI during CI.
+Before public-v1 launch, `/api/app` may make intentional breaking changes together with its generated client and web consumers in one reviewed PR.
 
-Breaking API changes require a new major API version or explicit deprecation lifecycle.
+After an endpoint is published under `/api/v1`, breaking changes require a new major API version or explicit deprecation lifecycle.
 
 ## 12. Deprecation
 
-Deprecated fields/endpoints SHOULD provide:
+Published public-v1 deprecated fields/endpoints SHOULD provide:
 
 - deprecation notice;
 - replacement;
@@ -464,7 +527,7 @@ Share snapshots SHOULD preserve model/metric versions when immutable semantics m
 
 ## 14. Source redistribution
 
-The public API MUST follow DATA_LICENSING.md.
+Both the application API and any published public API MUST follow DATA_LICENSING.md.
 
 Default:
 
@@ -482,31 +545,33 @@ Internal:
 
 Public status:
 
-- `/api/v1/status`
+- `/api/app/status`
 
 Readiness MUST consider database/API health; upstream War API outage alone SHOULD NOT make the public read API unready if cached data can be served.
 
 ## 16. Acceptance criteria
 
-1. OpenAPI fully describes public v1.
-2. Generated TS client builds in CI.
-3. ETag revalidation works.
-4. Cursor pagination is stable under appended changes.
-5. Historical low-resolution data cannot masquerade as high-resolution output.
-6. CSV and JSON expose the same metric semantics.
-7. Rate limiting protects expensive analytics endpoints.
-8. Objective History never serializes polling-bounded changes as exact event timestamps.
-9. Objective-derived responses expose identity resolution version and identity coverage.
-10. Old objective aliases remain resolvable after rename/merge.
-11. War-relative responses expose `timeSemanticsVersion` and `warTimeRevision`.
-12. Day endpoints use half-open elapsed-war intervals and never expose an empty day after an exact conquest-end boundary.
-13. Partial Day-vs-Day comparison mode is explicit.
-14. Boundary-ambiguous poll-derived changes are distinguishable from exact-single-bucket changes.
-15. Observation-sensitive analytics expose `collectionProfileVersion` separately from output resolution.
-16. Generic timeline resolution cannot claim finer granularity than the supporting collection/source evidence.
-17. Sealed-war bulk artifacts expose archive revision and content hash.
-18. Replay manifest/state/changes use the same canonical history as Timeline.
-19. Replay state distinguishes confirmed observed, transition uncertain and no-coverage states.
-20. Replay never emits a fabricated exact transition timestamp.
-21. A direct replay-state query agrees with baseline+change reconstruction under documented semantics.
-22. Current War exposes enough canonical identity to navigate into the same war Timeline/Replay workspace.
+1. Application OpenAPI fully describes the P0 first-party contract.
+2. Generated TS client builds against that application document in CI once implementation exists.
+3. Public `/api/v1` is not declared stable until the explicit P1 publication decision.
+4. ETag revalidation works.
+5. Cursor pagination is stable under appended changes.
+6. Historical low-resolution data cannot masquerade as high-resolution output.
+7. CSV and JSON expose the same metric semantics.
+8. Rate limiting protects expensive analytics endpoints.
+9. Objective History never serializes polling-bounded changes as exact event timestamps.
+10. Objective-derived responses expose identity resolution version and identity coverage.
+11. Old objective aliases remain resolvable after rename/merge.
+12. War-relative responses expose `timeSemanticsVersion` and `warTimeRevision`.
+13. Day endpoints use half-open elapsed-war intervals and never expose an empty day after an exact conquest-end boundary.
+14. Partial Day-vs-Day comparison mode is explicit.
+15. Boundary-ambiguous poll-derived changes are distinguishable from exact-single-bucket changes.
+16. Observation-sensitive analytics expose `collectionProfileVersion` separately from output resolution.
+17. Generic timeline resolution cannot claim finer granularity than the supporting collection/source evidence.
+18. Composite Timeline responses expose per-series freshness/resolution/coverage and do not imply source simultaneity.
+19. Sealed-war bulk artifacts expose archive revision and content hash.
+20. Replay manifest/state/changes use the same canonical history as Timeline.
+21. Replay separates state value from replayEvidenceClass and supports observed_exact, supported_continuity, transition_uncertain, last_known and no_coverage.
+22. Replay never emits a fabricated exact transition timestamp; reconstructionBoundaryAt is explicitly not an event time.
+23. Direct replay-state output agrees with baseline + changes + uncertainty windows + coverage/freshness reconstruction.
+24. Current War exposes enough canonical identity to navigate into the same war Timeline/Replay workspace.

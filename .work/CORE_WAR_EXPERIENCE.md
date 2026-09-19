@@ -234,7 +234,7 @@ It SHOULD contain:
 - total/faction casualties where supported;
 - recent casualty rate;
 - observed objective activity;
-- observed regional activity;
+- regional casualty activity and other explicitly registered region metrics where supported;
 - a large Timeline surface that visually dominates the working page;
 - direct entry into the canonical full-war Timeline and Replay.
 
@@ -287,8 +287,10 @@ Baseline layers MAY include:
 1. casualties / casualty rate;
 2. observed control balance or another defensible state aggregate;
 3. observed objective changes;
-4. regional activity;
+4. regional casualty activity or another explicitly registered region metric;
 5. source coverage / degraded periods.
+
+The P0 UI MUST NOT expose an opaque composite "Regional Activity" number unless METRICS.md defines its formula/version. Prefer named measures such as regional casualties/hour or regional casualty share.
 
 All layers share one x-axis: canonical war time.
 
@@ -381,13 +383,19 @@ MUST NOT appear as authoritative segmentation until the model is released under 
 
 Replay reconstructs an **observed historical state**, not omniscient truth.
 
-The model distinguishes at least:
+Replay returns the state value separately from the **strength/type of evidence** supporting that state.
 
-1. confirmed_observed — the accepted state is supported for the selected point under Chronicle coverage semantics;
-2. transition_uncertain — adjacent observations establish that a change occurred in an interval containing the selected point, but not exactly when;
-3. no_coverage — Chronicle does not have sufficient valid evidence for the selected point.
+Baseline evidence classes:
 
-Replay MUST display these states in a color-independent way.
+1. `observed_exact` — the selected instant is an accepted observation/representation-validation checkpoint;
+2. `supported_continuity` — valid bracketing samples support the same accepted state and coverage policy accepts the interval, but a transient change entirely between polls cannot be excluded;
+3. `transition_uncertain` — valid bounding samples have different states, so the exact transition instant inside the interval is unknown;
+4. `last_known` — a previous accepted state exists and remains inside the configured freshness horizon, but there is no later valid bound yet;
+5. `no_coverage` — evidence is insufficient for the selected instant.
+
+Replay MUST display these classes in a color-independent way.
+
+`supported_continuity` is intentionally weaker than "confirmed continuously". Chronicle only proves what it sampled/validated.
 
 ### 8.1 Example
 
@@ -436,11 +444,15 @@ Primary controls:
 - region focus;
 - direct Timeline <-> Replay transition.
 
-Replay legend MUST distinguish:
+Replay legend MUST distinguish at least:
 
-- confirmed observed state;
+- exact observed/validated checkpoint;
+- supported continuity between same-state samples;
 - transition uncertainty;
+- last-known current-edge state;
 - insufficient coverage.
+
+Replay coordinate/layout semantics are defined in [MAP_PRESENTATION.md](./MAP_PRESENTATION.md).
 
 The map is contextual and historical. It MUST NOT grow into:
 
@@ -452,12 +464,12 @@ The map is contextual and historical. It MUST NOT grow into:
 
 ## 10. Replay API shape
 
-The public/first-party API SHOULD expose three replay-oriented resources.
+The P0 first-party application API exposes three replay-oriented resources. Selected equivalents may be published later under the stable public API.
 
 ### 10.1 Manifest
 
 ~~~http
-GET /api/v1/wars/{chronicleWarId}/replay/manifest
+GET /api/app/wars/{chronicleWarId}/replay/manifest
 ~~~
 
 Purpose: load stable or slowly changing replay metadata.
@@ -479,42 +491,55 @@ Manifest responses for sealed wars may be cached aggressively.
 ### 10.2 State at selected time
 
 ~~~http
-GET /api/v1/wars/{chronicleWarId}/replay/state?at={utcInstant}
+GET /api/app/wars/{chronicleWarId}/replay/state?at={utcInstant}
 ~~~
 
 It SHOULD return each included objective/region state with:
 
 - canonical ID;
 - position;
-- observed owner/state;
-- replayStateClass;
-- previous supporting observation;
+- observed owner/state where supported;
+- replayEvidenceClass;
+- previous supporting observation/validation;
 - next bounding observation where relevant;
+- freshness age/horizon for last_known;
 - coverage/quality;
 - identity resolution version;
 - data/revision metadata.
 
-replayStateClass baseline values:
+replayEvidenceClass baseline values:
 
 ~~~text
-confirmed_observed
+observed_exact
+supported_continuity
 transition_uncertain
+last_known
 no_coverage
 ~~~
 
-The response MUST NOT fabricate exact transition timestamps.
+The response MUST NOT fabricate exact transition timestamps or imply uninterrupted truth between same-state samples.
 
 ### 10.3 Change range
 
 ~~~http
-GET /api/v1/wars/{chronicleWarId}/replay/changes
+GET /api/app/wars/{chronicleWarId}/replay/changes
     ?from={utcInstant}
     &to={utcInstant}
     &after={cursor}
     &limit={n}
 ~~~
 
-Returns ordered observed-change records with their uncertainty intervals.
+Returns deterministically ordered observed-change records with their uncertainty intervals.
+
+Each record MUST expose:
+
+- previousObservedAt;
+- currentObservedAt;
+- previous/current state;
+- reconstructionBoundaryAt = currentObservedAt;
+- stable change/objective identity needed for deterministic ordering.
+
+`reconstructionBoundaryAt` is the point where the newly observed state becomes applicable to Chronicle's reconstruction. It is NOT an asserted in-game event time.
 
 This endpoint supports local playback after a baseline seek.
 
@@ -532,7 +557,8 @@ seek
 
 play
   -> advance local cursor
-  -> apply ordered deltas locally
+  -> maintain active uncertainty windows
+  -> apply newly observed state only at reconstructionBoundaryAt
   -> fetch additional change windows when needed
 ~~~
 
@@ -544,13 +570,18 @@ Thus:
 
 A fresh direct seek may request a new baseline state.
 
-The client MUST be able to reconstruct the same state from:
+The client MUST be able to reconstruct the same state **and replayEvidenceClass** from:
 
 ~~~text
-baseline state + ordered accepted change stream
+baseline state
++ ordered accepted change stream
++ active uncertainty windows
++ coverage/freshness evidence
 ~~~
 
-as a direct state query for the same supported point, modulo explicitly documented coverage/uncertainty semantics.
+as a direct state query for the same supported point.
+
+A client MUST NOT represent the previous state as certain throughout the open interior of a different-state observation window merely because the new state is applied at `currentObservedAt`.
 
 ## 12. Timeline / Replay synchronization
 
@@ -679,43 +710,35 @@ Provide:
 
 Implementation SHOULD prove the product vertically rather than build every analytical module first.
 
-Recommended order:
+Implementation proceeds on two early tracks that converge before Replay:
 
-1. **Current War identity/state**
-   - ingest war + region report;
-   - canonical current war by shard;
-   - Current War status strip/freshness.
+### Track A — temporal/counter product spine
 
-2. **Timeline foundation**
-   - durable time observations/buckets;
-   - casualty/regional activity layers;
-   - canonical inspection cursor;
-   - current + sealed-war timeline API.
+1. ingest war + region report;
+2. canonical current war by shard;
+3. Current War status/freshness;
+4. Timeline casualty/coverage foundation;
+5. canonical inspection cursor and composite Timeline transport.
 
-3. **Objective historical state**
-   - dynamic map ingestion;
-   - objective identity/evidence;
-   - objective state intervals;
-   - observed changes with uncertainty windows.
+### Track B — objective-history calibration spine
 
-4. **Replay read projection**
-   - manifest;
-   - state-at-time;
-   - change-range;
-   - confirmed/uncertain/no-coverage classification.
+1. ingest and retain real static/dynamic payloads;
+2. build a labeled high-confidence objective corpus;
+3. measure coordinate/neighbor/ambiguity distributions;
+4. calibrate and freeze `objective-identity-v1` thresholds;
+5. establish golden matcher fixtures;
+6. produce accepted objective observations/state intervals/observed changes.
 
-5. **Unified web experience**
-   - Current War with dominant Timeline;
-   - canonical War Timeline workspace;
-   - Replay;
-   - shared at cursor;
-   - archive/war selector and region drill-down.
+Production objective Replay MUST NOT bypass Track B by guessing identity thresholds.
 
-6. **Hardening**
-   - A -> B -> A fixtures;
-   - direct-state vs baseline+changes invariant;
-   - cache/load/accessibility tests;
-   - active-war degraded-data behavior.
+### Convergence
+
+1. Replay manifest + map presentation contract;
+2. Replay state-at-time + change-range;
+3. evidence classes: exact/continuity/uncertain/last-known/no-coverage;
+4. unified Current War / Timeline / Replay web experience;
+5. archive/war selector and region drill-down;
+6. hardening: A -> B -> A, direct-state vs local-reconstruction invariant, cache/load/accessibility and degraded-data behavior.
 
 Compare, Records, DNA, Similar Wars, War Phases and other P1/P2 models MUST NOT become prerequisites for this vertical path.
 
@@ -728,13 +751,14 @@ The core product is not considered implemented until:
 3. Timeline uses one canonical temporal axis and a synchronized inspection marker.
 4. Current War and historical wars use the same underlying war-history model.
 5. Replay can seek to a historical point and reconstruct observed state.
-6. Replay distinguishes confirmed observed, uncertain transition and no-coverage states.
+6. Replay distinguishes exact observation, supported continuity, uncertain transition, last-known and no-coverage evidence classes.
 7. Replay never assigns fabricated exact capture/transition timestamps.
 8. A -> B -> A history remains visible in Replay.
 9. Timeline observed-change markers expose observation uncertainty.
 10. Timeline and Replay share the same URL-restorable at cursor.
-11. Replay playback applies local change deltas rather than polling a full state per frame.
-12. Direct replay state and baseline+changes reconstruction agree under the documented semantics.
+11. Replay playback maintains uncertainty windows and applies new state only at deterministic reconstruction boundaries rather than polling a full state per frame.
+12. Direct replay state/evidence class and baseline+changes+coverage reconstruction agree under the documented semantics.
 13. P0 works without War Phases, percentile context, DNA, Similar Wars, Compare or Records.
 14. Source/freshness/coverage remain visible enough to explain what the user is seeing.
-15. The product remains a historical observatory, not a tactical map replacement.
+15. Production objective Replay is gated by a calibrated/versioned objective-identity corpus rather than guessed thresholds.
+16. Replay map presentation follows MAP_PRESENTATION.md and remains an historical observatory, not a tactical map replacement.

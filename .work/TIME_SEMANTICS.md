@@ -696,7 +696,7 @@ Avoid ambiguous public fields:
 
 ## 26. Routes
 
-`GET /api/v1/wars/{war}/days/{day}`
+`GET /api/app/wars/{chronicleWarId}/days/{day}`
 
 `day` is Chronicle 1-based elapsed war day.
 
@@ -710,7 +710,7 @@ The response MUST identify:
 - time semantics version;
 - war time revision.
 
-`GET /api/v1/compare/days?day=N&wars=...`
+`GET /api/app/compare/days?day=N&wars=...`
 
 uses the same semantics and supports an explicit partial comparison mode.
 

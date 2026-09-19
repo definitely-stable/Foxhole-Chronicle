@@ -132,7 +132,7 @@ Connection strings/secrets are supplied through deployment secret configuration,
 
 ## 10. Operator plane
 
-Future internal mutation/operator endpoints MUST be separated from /api/v1.
+Future mutation/operator endpoints MUST be separated from both the first-party read surface (/api/app) and the future public read surface (/api/v1).
 
 Before operator mutations are enabled, Chronicle MUST define:
 
