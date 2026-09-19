@@ -88,6 +88,28 @@ Resolved baseline:
 - raw replay evidence is replicated to an independent offsite failure domain;
 - recovery is incomplete if PostgreSQL references missing external replay payloads;
 - no table partitioning, custom packfiles or large-data platform components without measured evidence.
+### Idempotency, transactions and crash recovery
+
+The September 2026 idempotency/crash-recovery pass is materialized in [IDEMPOTENCY_RECOVERY.md](./IDEMPOTENCY_RECOVERY.md), [research/IDEMPOTENCY_TRANSACTION_CRASH_RECOVERY_RESEARCH_2026-09-19.md](./research/IDEMPOTENCY_TRANSACTION_CRASH_RECOVERY_RESEARCH_2026-09-19.md), and [adr/idempotency-transaction-crash-recovery.md](./adr/idempotency-transaction-crash-recovery.md).
+
+Resolved baseline:
+
+- Chronicle does not claim exactly-once execution;
+- logical collection job, attempt, HTTP fetch, payload, representation validation and canonical reconciliation operation are distinct identities;
+- deterministic job/operation IDs and unique constraints provide retry idempotency; request/capture timestamps do not;
+- HTTP/compression/external CAS/heavy analytics remain outside PostgreSQL transactions;
+- normal reconciliation uses short READ COMMITTED transactions plus explicit endpoint cursor locking;
+- lease_generation is the stale-worker fencing token;
+- external CAS is durably published before DB reference commit; orphan objects are the safe failure direction;
+- unknown COMMIT is reconciled by stable operation ID; PostgreSQL pg_xact_status(xid8) is supplemental evidence when XID is available;
+- outbox delivery is at-least-once; claim transaction ends before handler execution; completion is generation-fenced;
+- LISTEN/NOTIFY is wake-up only, never durable queue state;
+- reprocessing activation and war sealing are versioned/fenced;
+- complete PITR recovery is bounded by both WAL availability and verified external replay-payload availability;
+- kill -9, network cut around COMMIT, ENOSPC, duplicate/stale worker and PITR+CAS restore tests are production gates.
+
+Community material from Reddit/Habr was used only to test operational failure patterns. PostgreSQL/.NET/Linux/object-store/pgBackRest primary documentation defines guarantees.
+
 ### Objective identity
 
 Chronicle-owned objective identity is now an accepted requirement because the official map-item schema has no stable objective ID. Coordinate tolerance and cross-war matching still require calibration against a real payload corpus before being treated as collision-free.
