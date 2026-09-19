@@ -29,6 +29,7 @@ This synthesis records the evidence used to harden Chronicle's durable worker pr
 - Advisory lock functions: https://www.postgresql.org/docs/18/functions-admin.html
 - Client timeouts including statement_timeout, transaction_timeout and lock_timeout: https://www.postgresql.org/docs/18/runtime-config-client.html
 - COMMIT durability semantics: https://www.postgresql.org/docs/18/sql-commit.html
+- non-durable settings / synchronous_commit risk: https://www.postgresql.org/docs/18/non-durability.html
 - SQLSTATE appendix: https://www.postgresql.org/docs/18/errcodes-appendix.html
 - Transaction ID/status functions including pg_xact_status: https://www.postgresql.org/docs/18/functions-info.html
 - LISTEN: https://www.postgresql.org/docs/18/sql-listen.html
@@ -41,6 +42,7 @@ Important verified details:
 - PostgreSQL docs require retrying the complete transaction for serialization failures;
 - pg_xact_status can report committed/aborted/in-progress for sufficiently recent transactions and explicitly mentions disconnect during COMMIT;
 - transaction_timeout exists and can bound whole transaction lifetime;
+- synchronous_commit=off can acknowledge transactions before WAL is durably flushed and therefore is unsuitable for Chronicle's canonical durability paths;
 - SKIP LOCKED is intended for queue-like consumers and yields an intentionally inconsistent view.
 
 ### EF Core / Npgsql / .NET
