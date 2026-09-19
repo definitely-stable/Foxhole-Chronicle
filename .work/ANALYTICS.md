@@ -16,7 +16,7 @@ Purpose: compare the same elapsed war day across wars.
 
 Canonical route:
 
-`/war/{war}/day/{day}`
+`/war/{chronicleWarId}/day/{day}`
 
 Comparison endpoint is defined in PUBLIC_API.md.
 
