@@ -1,4 +1,9 @@
+import {notFound} from "next/navigation";
 import {getTranslations, setRequestLocale} from "next-intl/server";
+
+export function generateStaticParams() {
+  return [{chronicleWarId: "__placeholder__"}];
+}
 
 type Props = {
   params: Promise<{locale: string; chronicleWarId: string}>;
@@ -7,6 +12,10 @@ type Props = {
 export default async function WarReplayPage({params}: Props) {
   const {locale, chronicleWarId} = await params;
   setRequestLocale(locale);
+
+  if (chronicleWarId === "__placeholder__") {
+    notFound();
+  }
 
   const t = await getTranslations("Replay");
 
