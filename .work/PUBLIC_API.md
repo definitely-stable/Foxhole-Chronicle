@@ -43,7 +43,7 @@ The normalized API contracts MUST:
 
 Neither API surface is localized.
 
-- `/api/app/*` and future `/api/app/*` MUST NOT be nested below `/{locale}`.
+- `/api/app/*` and future `/api/v1/*` MUST NOT be nested below `/{locale}`.
 - JSON field names, enum tokens, identifiers, timestamps and CSV column names are culture-invariant machine contracts.
 - `Accept-Language` MUST NOT change the semantic representation of canonical data.
 - Human-facing API documentation MAY be localized in the Next.js UI.
@@ -525,7 +525,7 @@ Share snapshots SHOULD preserve model/metric versions when immutable semantics m
 
 ## 14. Source redistribution
 
-The public API MUST follow DATA_LICENSING.md.
+Both the application API and any published public API MUST follow DATA_LICENSING.md.
 
 Default:
 
@@ -553,8 +553,8 @@ Readiness MUST consider database/API health; upstream War API outage alone SHOUL
 2. Generated TS client builds against that application document in CI once implementation exists.
 3. Public `/api/v1` is not declared stable until the explicit P1 publication decision.
 4. ETag revalidation works.
-6. Cursor pagination is stable under appended changes.
-5. Historical low-resolution data cannot masquerade as high-resolution output.
+5. Cursor pagination is stable under appended changes.
+6. Historical low-resolution data cannot masquerade as high-resolution output.
 7. CSV and JSON expose the same metric semantics.
 8. Rate limiting protects expensive analytics endpoints.
 9. Objective History never serializes polling-bounded changes as exact event timestamps.
@@ -566,9 +566,10 @@ Readiness MUST consider database/API health; upstream War API outage alone SHOUL
 15. Boundary-ambiguous poll-derived changes are distinguishable from exact-single-bucket changes.
 16. Observation-sensitive analytics expose `collectionProfileVersion` separately from output resolution.
 17. Generic timeline resolution cannot claim finer granularity than the supporting collection/source evidence.
-18. Sealed-war bulk artifacts expose archive revision and content hash.
-19. Replay manifest/state/changes use the same canonical history as Timeline.
-20. Replay state distinguishes confirmed observed, transition uncertain and no-coverage states.
-21. Replay never emits a fabricated exact transition timestamp.
-22. A direct replay-state query agrees with baseline+change reconstruction under documented semantics.
-23. Current War exposes enough canonical identity to navigate into the same war Timeline/Replay workspace.
+18. Composite Timeline responses expose per-series freshness/resolution/coverage and do not imply source simultaneity.
+19. Sealed-war bulk artifacts expose archive revision and content hash.
+20. Replay manifest/state/changes use the same canonical history as Timeline.
+21. Replay separates state value from replayEvidenceClass and supports observed_exact, supported_continuity, transition_uncertain, last_known and no_coverage.
+22. Replay never emits a fabricated exact transition timestamp; reconstructionBoundaryAt is explicitly not an event time.
+23. Direct replay-state output agrees with baseline + changes + uncertainty windows + coverage/freshness reconstruction.
+24. Current War exposes enough canonical identity to navigate into the same war Timeline/Replay workspace.
