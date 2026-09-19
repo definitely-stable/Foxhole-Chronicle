@@ -264,11 +264,94 @@ A source map `version` is preserved but is not assumed globally unique across wa
 
 ## 6. Objective state and change history
 
-### 6.1 Objective identities
+### 6.1 Objective identities and revisions
 
-`objective_identities`, `objective_revisions`, and aliases are defined in OBJECTIVE_IDENTITY.md.
+`objective_identities`, `objective_revisions`, and `objective_aliases` are defined in OBJECTIVE_IDENTITY.md.
 
-### 6.2 Objective observations
+Canonical identity rows are durable. Matcher upgrades MUST NOT rewrite raw evidence or physically delete superseded canonical identities.
+
+### 6.2 Source item observations
+
+`source_item_observations` stores one raw/normalized source item occurrence before canonical resolution:
+
+- `id uuid PK`
+- `map_observation_id uuid NOT NULL FK`
+- `war_id uuid NOT NULL FK`
+- `region_id uuid NOT NULL FK`
+- `source_map_name text NOT NULL`
+- `source_item_kind text NOT NULL`
+- `source_array_ordinal integer NULL`
+- `icon_type_raw integer NULL`
+- `team_id_raw text NULL`
+- `flags_raw bigint NULL`
+- `x numeric NOT NULL`
+- `y numeric NOT NULL`
+- `text_raw text NULL`
+- `map_marker_type_raw text NULL`
+- `raw_item_hash char(64) NOT NULL`
+- `taxonomy_version text NOT NULL`
+- `normalized_family text NULL`
+- `created_at timestamptz NOT NULL`
+
+Unique:
+
+`(map_observation_id, raw_item_hash)`
+
+`source_array_ordinal` is forensic evidence only and MUST NOT participate in identity.
+
+### 6.3 Identity match runs, candidates and decisions
+
+`identity_match_runs`
+
+- `id uuid PK`
+- `matcher_version text NOT NULL`
+- `taxonomy_version text NOT NULL`
+- `resolution_scope text NOT NULL`
+- `war_id uuid NULL FK`
+- `input_fingerprint char(64) NOT NULL`
+- `parameters jsonb NOT NULL`
+- `status text NOT NULL`
+- `started_at timestamptz NOT NULL`
+- `completed_at timestamptz NULL`
+
+`identity_candidates`
+
+- `id uuid PK`
+- `match_run_id uuid NOT NULL FK`
+- `source_item_observation_id uuid NOT NULL FK`
+- `candidate_objective_id uuid NOT NULL FK`
+- `candidate_revision_id uuid NULL FK`
+- `rank integer NOT NULL`
+- `distance numeric NULL`
+- `feature_vector jsonb NOT NULL`
+- `score numeric NOT NULL`
+- `family_compatible boolean NOT NULL`
+- `within_acceptance_radius boolean NOT NULL`
+
+Unique:
+
+`(match_run_id, source_item_observation_id, candidate_objective_id)`
+
+`identity_match_decisions`
+
+- `id uuid PK`
+- `match_run_id uuid NOT NULL FK`
+- `source_item_observation_id uuid NOT NULL FK`
+- `resolved_objective_id uuid NULL FK`
+- `resolved_revision_id uuid NULL FK`
+- `decision text NOT NULL`
+- `best_score numeric NULL`
+- `second_best_score numeric NULL`
+- `ambiguity_margin numeric NULL`
+- `decision_reason jsonb NOT NULL`
+- `effective_resolution_version text NOT NULL`
+- `created_at timestamptz NOT NULL`
+
+Decision values include `accepted_auto`, `accepted_manual`, `ambiguous`, `unmatched`, `rejected`, and `superseded`.
+
+`identity_manual_overrides` is append-only and stores reversible reviewer decisions, previous decision linkage, replacement objective/revision, actor, reason and timestamps.
+
+### 6.4 Objective observations
 
 `objective_observations`
 
@@ -278,6 +361,9 @@ A source map `version` is preserved but is not assumed globally unique across wa
 - `objective_revision_id uuid FK`
 - `source_fetch_id uuid FK`
 - `map_observation_id uuid FK`
+- `source_item_observation_id uuid NOT NULL FK`
+- `identity_match_decision_id uuid NOT NULL FK`
+- `identity_resolution_version text NOT NULL`
 - `observed_at timestamptz NOT NULL`
 - `team_state_raw text NULL`
 - `team_state_normalized text NULL`
@@ -295,7 +381,25 @@ A source map `version` is preserved but is not assumed globally unique across wa
 
 Unknown icon codes and flag bits MUST survive losslessly.
 
-### 6.3 Observed changes
+### 6.5 Objective state intervals
+
+`objective_state_intervals`
+
+- `id uuid PK`
+- `objective_id uuid NOT NULL FK`
+- `war_id uuid NOT NULL FK`
+- `identity_resolution_version text NOT NULL`
+- `state_version text NOT NULL`
+- `owner_state text NULL`
+- `state_payload jsonb NOT NULL`
+- `first_observed_at timestamptz NOT NULL`
+- `last_observed_at timestamptz NOT NULL`
+- `next_state_first_observed_at timestamptz NULL`
+- `coverage_ratio numeric NULL`
+- `quality_class text NOT NULL`
+- `created_at timestamptz NOT NULL`
+
+### 6.6 Observed changes
 
 `observed_changes`
 
@@ -312,6 +416,7 @@ Unknown icon codes and flag bits MUST survive losslessly.
 - `previous_map_observation_id uuid NULL FK`
 - `current_map_observation_id uuid NULL FK`
 - `detector_version text NOT NULL`
+- `identity_resolution_version text NULL`
 - `coverage_ratio numeric NULL`
 - `confidence_class text NOT NULL`
 - `quality_flags jsonb NOT NULL DEFAULT '{}'`
@@ -554,7 +659,13 @@ Initial B-tree indexes SHOULD cover:
 - `war_observations (war_id, captured_at)`
 - `region_observations (war_id, region_id, captured_at)`
 - `map_observations (war_id, region_id, map_kind, captured_at)`
+- `source_item_observations (war_id, region_id, normalized_family)`
+- `source_item_observations (map_observation_id, raw_item_hash)`
+- `identity_candidates (source_item_observation_id, score DESC)`
+- `identity_match_decisions (source_item_observation_id, effective_resolution_version)`
+- `identity_manual_overrides (objective_id, created_at DESC)`
 - `objective_observations (war_id, objective_id, observed_at)`
+- `objective_state_intervals (objective_id, war_id, first_observed_at)`
 - `observed_changes (war_id, current_observed_at)`
 - `observed_changes (objective_id, current_observed_at)`
 - `war_time_buckets (war_id, bucket_width, bucket_start)`
@@ -585,9 +696,12 @@ Every migration MUST be tested against a production-like PostgreSQL container an
 4. `warNumber` is not a canonical war key.
 5. Official facts are always shard-scoped.
 6. No objective identity may depend on upstream array order.
-7. Unknown icon/enum/flag values are preserved losslessly.
-8. Quarantined source observations do not become normal current state.
-9. No derived value exists without algorithm/version identity.
-10. No analytical result hides inadequate source coverage.
-11. No historical import erases original provenance.
-12. No share/export silently changes semantics after an algorithm version change.
+7. A hash of mutable source fields is not a canonical objective ID.
+8. Identity candidates, decisions and manual overrides are versioned/auditable.
+9. Matcher reprocessing MUST preserve immutable source evidence and previous resolution history.
+10. Unknown icon/enum/flag values are preserved losslessly.
+11. Quarantined or ambiguous source observations do not become normal canonical state without an accepted resolution.
+12. No derived value exists without algorithm/version identity.
+13. No analytical result hides inadequate source or identity coverage.
+14. No historical import erases original provenance.
+15. No share/export silently changes semantics after an algorithm version change.
