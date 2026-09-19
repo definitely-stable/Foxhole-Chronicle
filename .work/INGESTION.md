@@ -294,11 +294,17 @@ Retries create a new `ingestion_attempt` linked to the same logical job. The log
 
 HTTP fetches, compression, external CAS writes/uploads and heavy derivation MUST run outside PostgreSQL transactions.
 
-The normal ingestion path uses:
+The normal ingestion path is the same five-phase protocol defined normatively in IDEMPOTENCY_RECOVERY.md:
 
-1. a short **claim transaction** that leases the logical job and creates the attempt;
-2. HTTP/raw preparation outside PostgreSQL;
-3. a short **reconciliation transaction** that locks the endpoint cursor, verifies the lease generation, persists fetch/payload links and accepted facts, mutates canonical state, persists coverage evidence and inserts required outbox work atomically.
+1. **logical-job claim transaction** — lease the logical job, increment `lease_generation`, create the attempt, commit;
+2. **endpoint-ownership transaction** — lock `endpoint_poll_state`, acquire/steal the endpoint lease, increment `fence_token`, bind owner attempt, commit;
+3. **HTTP/raw preparation outside PostgreSQL** — perform exactly one audited HTTP exchange for the attempt, read/hash bytes, and durably publish external CAS when used;
+4. **raw-capture transaction** — persist/reconcile `source_fetch`, payload metadata/bytes or durable CAS reference, representation link and raw-durable checkpoint, then commit;
+5. **canonical reconciliation transaction** — lock `endpoint_poll_state` first and `endpoint_cursors` second, verify both job generation and endpoint fence/owner, load already raw-durable evidence, apply accepted canonical mutation/coverage/state intervals/changes, insert outbox work and the reconciliation-operation ledger, finalize scheduling/outcome, then commit.
+
+The raw-capture and canonical reconciliation transactions are deliberately separate. Canonical reconciliation MUST NOT be the first/only durable Chronicle copy of a successfully received 200 response.
+
+The reconciliation transaction MUST NOT reinsert or recreate fetch/payload evidence that should already be raw-durable; it references/reconciles the committed raw-capture rows.
 
 Default isolation is `READ COMMITTED` with explicit row locking/unique constraints. `SERIALIZABLE` is reserved for rare cross-row invariants that justify it.
 
@@ -308,7 +314,7 @@ A connection loss during `COMMIT` is an **unknown outcome**. For raw capture, re
 
 Initial worker write transactions SHOULD use `SET LOCAL` timeouts as defined in IDEMPOTENCY_RECOVERY.md and calibrate them under load.
 
-Source/HTTP retries remain bounded exponential backoff with jitter and preserve the same logical job identity.
+Source/HTTP retries remain bounded exponential backoff with jitter and preserve the same logical job identity. A retry creates a new ingestion attempt and therefore a new audited HTTP exchange/fetch; it does not hide transport retries inside one attempt.
 
 ## 11. Concurrency and stale completion
 
