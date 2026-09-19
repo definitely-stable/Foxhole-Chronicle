@@ -8,7 +8,9 @@ Base path:
 
 `/api/v1`
 
-OpenAPI is the canonical contract.
+OpenAPI 3.1 is the canonical machine-readable contract.
+
+ASP.NET Core 10 first-party OpenAPI generation is the source of that document. Chronicle SHOULD generate the public v1 OpenAPI document at build time with Microsoft.Extensions.ApiDescription.Server so frontend type generation and contract tests do not require starting the API process.
 
 ## 1. Principles
 
@@ -34,6 +36,29 @@ The public data API is not localized.
 - Date/number presentation formatting belongs to the UI; canonical timestamps remain ISO-8601 UTC and numeric JSON values remain numeric.
 
 See [LOCALIZATION.md](./LOCALIZATION.md).
+
+### Frontend contract generation
+
+The first-party Next.js client uses:
+
+~~~text
+ASP.NET Core endpoint metadata
+  -> build-time OpenAPI 3.1
+  -> openapi-typescript
+  -> generated TypeScript transport types
+  -> openapi-fetch
+~~~
+
+Rules:
+
+- generated TypeScript API transport types are not manually edited;
+- frontend code MUST NOT maintain duplicate handwritten transport DTOs when OpenAPI already defines them;
+- openapi-fetch remains a thin native-fetch client so response status/headers/ETag/Cache-Control remain available;
+- TanStack Query, where justified for a client-live surface, calls the same typed openapi-fetch client.
+
+Scalar.AspNetCore MAY expose a developer/internal interactive reference from the same OpenAPI document. It is not the canonical contract.
+
+See [PLATFORM_DEPENDENCIES.md](./PLATFORM_DEPENDENCIES.md) and [WEB_RUNTIME.md](./WEB_RUNTIME.md).
 
 ## 2. Core endpoints
 
@@ -243,7 +268,7 @@ A completed war ending exactly on a day boundary MUST NOT expose an empty follow
 
 ## 5. Errors
 
-Use ASP.NET Core ProblemDetails compatible with RFC 7807/9457 semantics.
+Use ASP.NET Core 10 AddProblemDetails / IProblemDetailsService with RFC 7807/9457-compatible semantics.
 
 Error payloads SHOULD include:
 
@@ -268,6 +293,8 @@ Do not use page-number pagination for continuously appended event/change streams
 
 ## 7. Caching
 
+ASP.NET Core Output Cache is the v1 server-response cache. The single-VPS baseline uses its in-process store; Redis is not required.
+
 Historical immutable/completed-war resources SHOULD use long-lived public caching with ETags.
 
 Current-war responses SHOULD use shorter Cache-Control and ETags.
@@ -277,6 +304,10 @@ The API SHOULD support `stale-while-revalidate` where behavior is appropriate.
 Algorithm-versioned resources MAY have very long cache lifetime if the URL/version fully identifies immutable semantics.
 
 War-relative historical cache keys MUST include or be invalidated by `warTimeRevision` when source time anchors are corrected.
+
+Cache policy is endpoint-class specific. Current/freshness responses use short bounded caching; sealed historical resources may use long caching; expensive comparison/records responses use revision-aware keys/tags. Errors and streaming responses are not cached by default.
+
+Output caching MUST NOT hide source/data freshness metadata: `dataAsOf` and `freshnessState` describe the underlying data, not the cache age.
 
 ## 8. Rate limiting
 
