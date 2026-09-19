@@ -21,6 +21,8 @@ The model MUST distinguish:
 
 Every durable analytical result MUST be reproducible from versioned inputs and a versioned algorithm.
 
+Durability/control relations such as ingestion jobs/attempts, reconciliation operations, endpoint cursors, outbox jobs, payload metadata and archive revisions MUST be ordinary WAL-logged PostgreSQL tables; they MUST NOT be UNLOGGED.
+
 ## 2. Identity conventions
 
 Chronicle uses internal immutable identifiers even when an upstream source provides an identifier.
@@ -1005,3 +1007,4 @@ Every migration MUST be tested against a production-like PostgreSQL container an
 32. Outbox execution is at-least-once and completion is fenced by lease generation.
 33. A successful external effect without outbox completion is recoverable by repeating the same deduplicated effect.
 34. Reprocessing activation and war sealing are versioned/fenced operations, not in-place rewrites.
+35. Durable control/provenance/outbox/archive relations are WAL-logged; UNLOGGED tables are not permitted for these invariants.
