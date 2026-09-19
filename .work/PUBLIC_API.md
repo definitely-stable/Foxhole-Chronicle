@@ -26,22 +26,32 @@ The API MUST:
 
 ### Current
 
-- `GET /api/v1/current`
+- `GET /api/v1/shards/{shard}/current`
 - `GET /api/v1/status`
 - `GET /api/v1/sources`
 
+A future aggregate `GET /api/v1/current` MAY return a collection of current wars across shards, but it MUST NOT imply one globally unique current war.
+
 ### Wars
 
+Canonical machine resource identity uses immutable Chronicle war UUID:
+
+- `GET /api/v1/wars/{chronicleWarId}`
+- `GET /api/v1/wars/{chronicleWarId}/timeline`
+- `GET /api/v1/wars/{chronicleWarId}/days/{day}` — `{day}` is Chronicle 1-based elapsed war day
+- `GET /api/v1/wars/{chronicleWarId}/regions`
+- `GET /api/v1/wars/{chronicleWarId}/regions/{region}`
+- `GET /api/v1/wars/{chronicleWarId}/dna`
+- `GET /api/v1/wars/{chronicleWarId}/similar`
+- `GET /api/v1/wars/{chronicleWarId}/phases`
+- `GET /api/v1/wars/{chronicleWarId}/swings`
+
+Lookup/convenience endpoints are explicitly shard-aware:
+
 - `GET /api/v1/wars`
-- `GET /api/v1/wars/{war}`
-- `GET /api/v1/wars/{war}/timeline`
-- `GET /api/v1/wars/{war}/days/{day}` — `{day}` is Chronicle 1-based elapsed war day
-- `GET /api/v1/wars/{war}/regions`
-- `GET /api/v1/wars/{war}/regions/{region}`
-- `GET /api/v1/wars/{war}/dna`
-- `GET /api/v1/wars/{war}/similar`
-- `GET /api/v1/wars/{war}/phases`
-- `GET /api/v1/wars/{war}/swings`
+- `GET /api/v1/shards/{shard}/wars/{warNumber}`
+
+`warNumber` MUST NOT be accepted as an unqualified canonical `{war}` path identifier because it is shard-scoped.
 
 ### Compare
 
@@ -71,7 +81,7 @@ Phase 2:
 
 Example:
 
-`GET /api/v1/wars/140/timeline?metric=casualties&from=...&to=...&resolution=auto`
+`GET /api/v1/wars/{chronicleWarId}/timeline?metric=casualties&from=...&to=...&resolution=auto`
 
 Supported generic resolution contract:
 
@@ -199,7 +209,7 @@ Avoid ambiguous public fields such as `day`, `warDay`, `timestamp`, `lastUpdated
 
 ### Day endpoint
 
-`GET /api/v1/wars/{war}/days/{day}` MUST identify:
+`GET /api/v1/wars/{chronicleWarId}/days/{day}` MUST identify:
 
 - requested elapsed day;
 - effective interval;
