@@ -50,6 +50,7 @@ TypeScript 7 is deliberately NOT used in the September 2026 bootstrap: its Go-ba
 Runtime:
 
 - next-intl — localization and locale routing;
+- @formatjs/intl-localematcher — Accept-Language best-fit matching behind Chronicle's Traditional-Chinese guard;
 - openapi-fetch — typed HTTP client over generated OpenAPI types;
 - nuqs 2.x — typed URL query-state for analytical/shareable view state;
 - zod 4.x — narrow runtime validation at untyped web boundaries;
