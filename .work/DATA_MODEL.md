@@ -179,13 +179,14 @@ A batch groups collection work but is **not** an atomic world snapshot.
 - `source_last_modified text NULL`
 - `source_timestamp timestamptz NULL`
 - `content_hash char(64) NULL`
-- `payload_id uuid NULL`
+- `payload_id uuid NULL` — physical payload received on this fetch; null for 304
+- `representation_payload_id uuid NULL` — payload representation validated by this fetch; points to prior payload on 304
 - `schema_fingerprint text NULL`
 - `attempt integer NOT NULL`
 - `outcome text NOT NULL`
 - `error_code text NULL`
 
-A fetch is one HTTP interaction. A `304` MUST NOT create a duplicate normalized observation.
+A fetch is one HTTP interaction. A `304` MUST NOT create a duplicate normalized observation, but SHOULD reference the previously accepted representation through `representation_payload_id` so coverage can use the validation instant.
 
 ### 4.4 Content-addressed raw payloads
 
@@ -466,6 +467,7 @@ Quarantined map observations MUST NOT be used as normal event bounds.
 - `actual_samples bigint NULL`
 - `coverage_ratio numeric NULL`
 - `resolution_class text NOT NULL`
+- `time_alignment_class text NULL`
 - `quality_class text NOT NULL`
 - `recorded_since_label text NULL`
 
@@ -666,6 +668,8 @@ Historical comparison SHOULD avoid normalizing across materially incompatible ru
 - `canonical_state jsonb`
 - `snapshot_mode text`
 - `algorithm_versions jsonb`
+- `time_semantics_version text NULL`
+- `war_time_revisions jsonb NULL`
 - `input_fingerprint char(64) NULL`
 - `created_at timestamptz`
 - `expires_at timestamptz NULL`
