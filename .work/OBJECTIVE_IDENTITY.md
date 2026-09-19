@@ -184,7 +184,8 @@ Fields:
 - `source_map_name text NOT NULL`
 - `source_item_kind text NOT NULL`
 - `evidence_reason text NOT NULL`
-- `source_array_ordinal integer NULL`
+- `source_occurrence_no integer NOT NULL` — Chronicle-assigned 0-based occurrence number within one immutable payload/source_item_kind
+- `source_array_ordinal integer NULL` — optional raw/original position evidence
 - `icon_type_raw integer NULL`
 - `team_id_raw text NULL`
 - `flags_raw bigint NULL`
@@ -197,13 +198,15 @@ Fields:
 - `normalized_family text NULL`
 - `created_at timestamptz NOT NULL`
 
-`source_array_ordinal` is retained as **payload-local occurrence evidence**. It MUST NOT be used for matching across observations or as canonical objective identity.
+`source_occurrence_no` is the required relational occurrence discriminator. The parser assigns it deterministically while traversing one immutable payload. It is intentionally unstable across payloads and MUST NOT be used for matching.
 
-Recommended uniqueness:
+`source_array_ordinal`, when retained, is optional raw/original payload evidence. It also MUST NOT be used as canonical identity.
 
-`(map_observation_id, source_item_kind, source_array_ordinal, evidence_reason)`
+Required uniqueness:
 
-If the upstream representation does not expose a usable ordinal, the parser MUST assign an equivalent deterministic payload-local occurrence discriminator. This preserves multiplicity when two occurrences have identical field content and therefore the same `raw_item_hash`.
+`(map_observation_id, source_item_kind, source_occurrence_no, evidence_reason)`
+
+This preserves multiplicity even when two occurrences have identical field content and the same `raw_item_hash`.
 
 The raw item hash is an observation-local content fingerprint, not a durable objective ID. Source occurrence identity and canonical objective identity are separate concepts.
 
