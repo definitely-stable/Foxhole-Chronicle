@@ -288,7 +288,7 @@ Candidate dimensions for `war_dna@1`:
 1. **casualty_intensity** — robust percentile of casualties/hour over comparable covered period;
 2. **casualty_balance** — normalized absolute faction casualty balance;
 3. **objective_volatility** — observed objective churn normalized by eligible objectives and covered time;
-4. **regional_concentration** — normalized regional activity concentration;
+4. **regional_casualty_concentration** — normalized concentration of observed casualty activity;
 5. **recapture_churn** — repeated state reversals per eligible objective/time;
 6. **pace** — elapsed duration behavior relative to cohort only for completed wars, or as-of-day comparison for active wars;
 7. **phase_variability** — distribution/transition characteristics from phase model where coverage permits.
