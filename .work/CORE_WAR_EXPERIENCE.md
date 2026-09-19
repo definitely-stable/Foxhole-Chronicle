@@ -673,7 +673,51 @@ Provide:
 - reduced-motion-safe behavior;
 - non-animated alternative for playback-sensitive users.
 
-## 18. Acceptance criteria
+## 18. P0 implementation order
+
+Implementation SHOULD prove the product vertically rather than build every analytical module first.
+
+Recommended order:
+
+1. **Current War identity/state**
+   - ingest war + region report;
+   - canonical current war by shard;
+   - Current War status strip/freshness.
+
+2. **Timeline foundation**
+   - durable time observations/buckets;
+   - casualty/regional activity layers;
+   - canonical inspection cursor;
+   - current + sealed-war timeline API.
+
+3. **Objective historical state**
+   - dynamic map ingestion;
+   - objective identity/evidence;
+   - objective state intervals;
+   - observed changes with uncertainty windows.
+
+4. **Replay read projection**
+   - manifest;
+   - state-at-time;
+   - change-range;
+   - confirmed/uncertain/no-coverage classification.
+
+5. **Unified web experience**
+   - Current War with dominant Timeline;
+   - canonical War Timeline workspace;
+   - Replay;
+   - shared at cursor;
+   - archive/war selector and region drill-down.
+
+6. **Hardening**
+   - A -> B -> A fixtures;
+   - direct-state vs baseline+changes invariant;
+   - cache/load/accessibility tests;
+   - active-war degraded-data behavior.
+
+Compare, Records, DNA, Similar Wars, War Phases and other P1/P2 models MUST NOT become prerequisites for this vertical path.
+
+## 19. Acceptance criteria
 
 The core product is not considered implemented until:
 
