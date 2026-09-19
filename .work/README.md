@@ -25,6 +25,7 @@ Research/review files are evidence and critique, not authoritative architecture 
 ├── DATA_MODEL.md
 ├── INGESTION.md
 ├── DATA_LIFECYCLE.md
+├── IDEMPOTENCY_RECOVERY.md
 ├── HISTORICAL_DATA.md
 ├── METRICS.md
 ├── ANALYTICS.md
@@ -36,6 +37,7 @@ Research/review files are evidence and critique, not authoritative architecture 
     ├── elapsed-war-day-vs-game-day.md
     ├── collection-cadence-and-storage.md
     ├── data-lifecycle-and-recovery.md
+    ├── idempotency-transaction-crash-recovery.md
     ├── observed-events-not-exact-events.md
     ├── objective-identity.md
     ├── historical-source-policy.md
@@ -73,6 +75,7 @@ TIME_SEMANTICS.md
 DATA_MODEL.md
 INGESTION.md
 DATA_LIFECYCLE.md
+IDEMPOTENCY_RECOVERY.md
 OBJECTIVE_IDENTITY.md
 METRICS.md
 DATA_LICENSING.md
@@ -174,5 +177,7 @@ The Time Semantics deep-research pass is integrated into `TIME_SEMANTICS.md`, `W
 Collection/storage profile `chronicle-collection-v1` is accepted: war 5m, warReport 15m/map, dynamic 15m/map, maps 60m, static once per war/map, with a 30-map/shard planning baseline. PostgreSQL stores sparse semantic history instead of duplicating every unchanged item occurrence. Exact raw evidence uses hybrid storage: small payloads may be inline; larger dynamic/static payloads use Zstd-compressed CAS. See `adr/collection-cadence-and-storage.md`.
 
 The data lifecycle/recovery pass is integrated in `DATA_LIFECYCLE.md` and `adr/data-lifecycle-and-recovery.md`: PostgreSQL transactional outbox, war sealing/archive revisions, Parquet/Zstd sealed projections, pgBackRest + WAL/PITR, offsite raw replication and restore verification. Generic high-resolution analytical output is now `15m` under `chronicle-collection-v1`; `5m` is metric-specific only when underlying evidence supports it.
+
+The idempotency/transaction/crash-recovery pass is integrated in `IDEMPOTENCY_RECOVERY.md` and `adr/idempotency-transaction-crash-recovery.md`: logical jobs are separated from attempts/fetches; endpoint lease generations fence stale workers; reconciliation uses short explicit PostgreSQL transactions; unknown COMMIT is reconciled by stable operation identity; outbox is explicitly at-least-once with idempotent effects; POSIX/object-store CAS publication, sealing and PITR+CAS recovery now have formal crash semantics and fault-injection gates.
 
 Items explicitly marked UNKNOWN or unresolved remain conservative implementation constraints, not invitations to guess.
