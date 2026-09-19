@@ -66,7 +66,7 @@ Serilog is not required for v1.
 
 Npgsql 10 emits metrics aligned more closely with OpenTelemetry database conventions and improved tracing for commands, COPY and physical connection opening.
 
-Use Npgsql.OpenTelemetry when database spans are enabled.
+Use Npgsql.OpenTelemetry when database spans are enabled. Npgsql currently documents its database tracing integration against still-evolving OpenTelemetry database tracing conventions, so span/tag dashboards MUST tolerate semantic-convention changes across reviewed upgrades. Npgsql metrics should follow the Npgsql 10 names rather than pre-10 dashboard names.
 
 Do not simultaneously add redundant database instrumentation that creates duplicate spans for the same PostgreSQL command.
 
@@ -85,6 +85,8 @@ Tags MUST NOT contain war IDs, payload hashes, user input or other high-cardinal
 ## 6. pg_stat_statements
 
 PostgreSQL production configuration MUST preload and enable pg_stat_statements.
+
+This requires pg_stat_statements in shared_preload_libraries (therefore a server restart when changing it) and CREATE EXTENSION in the Chronicle database. Query-ID calculation must remain enabled.
 
 It is the primary database-side aggregate query diagnostic.
 
