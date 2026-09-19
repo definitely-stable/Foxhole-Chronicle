@@ -1,10 +1,11 @@
+using Chronicle.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Chronicle.Infrastructure.Health;
 
 public sealed class PostgresReadinessHealthCheck(
-    IDbContextFactory<Persistence.ChronicleDbContext> dbContextFactory)
+    IDbContextFactory<ChronicleDbContext> dbContextFactory)
     : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
