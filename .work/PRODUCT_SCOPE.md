@@ -161,9 +161,11 @@ Includes where supported:
 - recent casualty rate;
 - observed objective activity;
 - observed regional activity;
-- compact/primary Timeline;
+- a large primary Timeline surface;
 - data freshness and coverage;
 - direct transition into full Timeline and Replay.
+
+It MUST reuse the same canonical war-history/Timeline semantics as the selected-war workspace rather than maintain a separate live dashboard data model.
 
 It MUST NOT become a miniature tactical map.
 
