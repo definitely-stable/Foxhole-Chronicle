@@ -1,4 +1,9 @@
+import {notFound} from "next/navigation";
 import {getTranslations, setRequestLocale} from "next-intl/server";
+
+export function generateStaticParams() {
+  return [{shard: "__placeholder__"}];
+}
 
 type Props = {
   params: Promise<{locale: string; shard: string}>;
@@ -7,6 +12,10 @@ type Props = {
 export default async function CurrentWarPage({params}: Props) {
   const {locale, shard} = await params;
   setRequestLocale(locale);
+
+  if (shard === "__placeholder__") {
+    notFound();
+  }
 
   const t = await getTranslations("CurrentWar");
 
