@@ -34,6 +34,22 @@ Resolved baseline:
 
 Remaining unknowns are explicitly listed in WAR_API_SEMANTICS.md and MUST stay conservative.
 
+### Time semantics
+
+The 2026-09-19 deep-research pass is materialized in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md) and [adr/elapsed-war-day-vs-game-day.md](./adr/elapsed-war-day-vs-game-day.md).
+
+Resolved baseline:
+
+- Chronicle elapsed war day is a 1-based 24-hour bucket anchored to validated `conquestStartTime`;
+- conquest analytics use half-open intervals;
+- exact conquest-end boundaries do not create an empty following day;
+- completed day count is separate from day-at-instant;
+- raw `dayOfWar` is diagnostics only;
+- UTC calendar date/local timezone/DST do not define analytical buckets;
+- collector/API downtime reduces coverage but does not pause elapsed time;
+- boundary-crossing polling uncertainty is not assigned to a fake exact day;
+- source-time corrections create a new war-time revision and trigger deterministic recomputation.
+
 ### Objective identity
 
 Chronicle-owned objective identity is now an accepted requirement because the official map-item schema has no stable objective ID. Coordinate tolerance and cross-war matching still require calibration against a real payload corpus before being treated as collision-free.
