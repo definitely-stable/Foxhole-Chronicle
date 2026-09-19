@@ -87,6 +87,7 @@ UUIDv7 is the default physical identifier for jobs/attempts/fetches because it i
 16. PostgreSQL restore is complete only when every referenced external replay payload required by that restore point is available and verified.
 17. Retry classification uses SQLSTATE/typed exceptions, not error-message text.
 18. Correctness MUST NOT depend on graceful shutdown.
+19. Canonical ingestion/outbox/sealing transactions MUST remain crash-durable: PostgreSQL `fsync` stays enabled and `synchronous_commit=off` MUST NOT be used for these transactions.
 
 ## 4. Durable ingestion state machines
 
@@ -584,7 +585,191 @@ CancellationToken cancellation stops waiting/work; it does not prove rollback af
 
 BackgroundService graceful shutdown SHOULD stop claiming new work, cancel bounded HTTP/CPU work and allow short DB commits to finish where possible. Correctness still relies on leases/fencing because StopAsync is not guaranteed on process failure.
 
-## 18. Observability
+## 18. Reference SQL / implementation patterns
+
+These are reference shapes; concrete migrations may adjust names/types while preserving invariants.
+
+### 18.1 Claim logical ingestion work
+
+~~~sql
+WITH picked AS (
+    SELECT id
+    FROM ingestion_jobs
+    WHERE state IN ('scheduled', 'retry_wait')
+      AND next_eligible_at <= now()
+      AND (lease_until IS NULL OR lease_until < now())
+    ORDER BY next_eligible_at, scheduled_for, id
+    FOR UPDATE SKIP LOCKED
+    LIMIT @batch_size
+)
+UPDATE ingestion_jobs j
+SET state = 'leased',
+    lease_owner = @worker_id,
+    lease_until = now() + @lease_duration,
+    lease_generation = j.lease_generation + 1,
+    attempt_count = j.attempt_count + 1,
+    updated_at = now()
+FROM picked
+WHERE j.id = picked.id
+RETURNING j.*;
+~~~
+
+Attempt creation occurs in the same claim transaction using the returned generation.
+
+### 18.2 Reconciliation fence
+
+~~~sql
+SELECT *
+FROM endpoint_cursors
+WHERE id = @endpoint_cursor_id
+FOR UPDATE;
+~~~
+
+Then verify:
+
+~~~text
+attempt.lease_generation == endpoint_cursor.lease_generation
+and logical job still owns that generation
+~~~
+
+If not, persist only safe immutable evidence and classify stale_fenced.
+
+The reconciliation operation ledger is inserted with a stable client-generated operation ID. A unique conflict on that exact operation ID means "load committed result", not "invent another operation".
+
+### 18.3 Outbox claim
+
+~~~sql
+WITH picked AS (
+    SELECT id
+    FROM outbox_jobs
+    WHERE state IN ('pending', 'retry')
+      AND available_at <= now()
+      AND (lease_until IS NULL OR lease_until < now())
+    ORDER BY priority DESC, available_at, id
+    FOR UPDATE SKIP LOCKED
+    LIMIT @batch_size
+)
+UPDATE outbox_jobs o
+SET state = 'processing',
+    lease_owner = @worker_id,
+    lease_until = now() + @lease_duration,
+    lease_generation = o.lease_generation + 1,
+    attempt_count = o.attempt_count + 1,
+    updated_at = now()
+FROM picked
+WHERE o.id = picked.id
+RETURNING o.*;
+~~~
+
+Commit the claim before handler execution.
+
+Completion:
+
+~~~sql
+UPDATE outbox_jobs
+SET state = 'completed',
+    completed_at = now(),
+    lease_owner = NULL,
+    lease_until = NULL,
+    updated_at = now()
+WHERE id = @id
+  AND state = 'processing'
+  AND lease_generation = @claimed_generation;
+~~~
+
+Affected rows must equal one. Zero rows means ownership was lost; the stale worker must not acknowledge the job.
+
+### 18.4 Unknown COMMIT pseudocode
+
+~~~text
+operationId = stable client-generated ID
+xid = null
+
+begin transaction
+  lock endpoint cursor
+  verify generation
+  apply idempotent writes using operationId
+  xid = SELECT pg_current_xact_id()
+  COMMIT
+
+if commit acknowledgement is lost:
+  reconnect
+  if reconciliation_operations contains operationId:
+      return committed result
+
+  if xid is available:
+      status = SELECT pg_xact_status(xid)
+      if status == 'committed':
+          re-read operationId; missing ledger row is an invariant alert
+      if status == 'in progress':
+          bounded wait/recheck
+      if status == 'aborted':
+          retry same operationId
+
+  retry/reconcile same operationId through unique constraints and fencing
+~~~
+
+A new operation ID MUST NOT be generated for this retry.
+
+### 18.5 .NET transaction skeleton
+
+~~~csharp
+var operationId = existingOrNewStableOperationId;
+
+return await retryPolicy.ExecuteAsync(async ct =>
+{
+    await using var db = dbContextFactory.CreateDbContext();
+    await using var tx = await db.Database.BeginTransactionAsync(
+        IsolationLevel.ReadCommitted, ct);
+
+    await db.Database.ExecuteSqlRawAsync(
+        "SET LOCAL lock_timeout = '2s'; " +
+        "SET LOCAL statement_timeout = '15s'; " +
+        "SET LOCAL transaction_timeout = '30s';", ct);
+
+    // SELECT endpoint cursor FOR UPDATE using targeted raw SQL.
+    // Verify lease_generation.
+    // Insert reconciliation operation using operationId.
+    // Upsert payload/fetch evidence.
+    // Apply accepted canonical mutation.
+    // Insert deduplicated outbox rows.
+
+    var xid = await ReadCurrentXidAsync(db, ct);
+
+    try
+    {
+        await tx.CommitAsync(ct);
+        return Committed(operationId);
+    }
+    catch (Exception ex) when (CouldBeUnknownCommit(ex))
+    {
+        return await ReconcileUnknownCommitAsync(operationId, xid, ct);
+    }
+});
+~~~
+
+The actual retry wrapper MUST distinguish "known rollback/transient" from "unknown commit". It MUST NOT wrap an ambiguous commit in a generic blind replay.
+
+### 18.6 POSIX CAS publish pseudocode
+
+~~~text
+hash = sha256(original_bytes)
+final = controlled_path(hash)
+temp = create_temp_same_filesystem(final)
+
+write_zstd(temp, original_bytes)
+flush_user_buffers(temp)
+fsync(temp)
+publish_atomically_if_absent(temp, final)
+fsync(parent_directory(final))
+verify_stored_object(final, expected_metadata)
+
+only now may PostgreSQL commit storage_ref = final
+~~~
+
+If final already exists, verify it and reuse it. Never replace mismatched content at a hash path.
+
+## 19. Observability
 
 Low-cardinality metrics:
 
@@ -613,7 +798,7 @@ Logs/traces SHOULD carry:
 
 logical_job_id, attempt_id, fetch_id, reconciliation_operation_id, outbox_job_id, lease_generation, archive_revision, trace/span IDs and payload hash as structured fields.
 
-## 19. Crash matrix
+## 20. Crash matrix
 
 | Crash point | Durable state | Recovery |
 |---|---|---|
@@ -633,7 +818,7 @@ logical_job_id, attempt_id, fetch_id, reconciliation_operation_id, outbox_job_id
 | PITR restores DB older than CAS | extra CAS objects | harmless orphans |
 | PITR restores DB newer than available offsite CAS | missing required evidence | recovery fails/degraded; choose earlier safe watermark |
 
-## 20. Fault-injection acceptance tests
+## 21. Fault-injection acceptance tests
 
 Before production, automated/integration tests MUST cover:
 
@@ -660,7 +845,7 @@ Before production, automated/integration tests MUST cover:
 
 Use real PostgreSQL integration tests (Testcontainers) for transaction/locking semantics. Toxiproxy or equivalent fault injection MAY be used for network cuts. Filesystem tests SHOULD include process kill and ENOSPC scenarios on Linux.
 
-## 21. Rejected patterns
+## 22. Rejected patterns
 
 Chronicle MUST NOT:
 
@@ -682,7 +867,7 @@ Chronicle MUST NOT:
 - catch every exception and retry it generically;
 - introduce PostgreSQL 2PC merely to coordinate Chronicle CAS/outbox work.
 
-## 22. Production acceptance gate
+## 23. Production acceptance gate
 
 The worker protocol is production-ready only when:
 
@@ -696,4 +881,5 @@ The worker protocol is production-ready only when:
 8. sealing is revisioned, idempotent and fenced;
 9. PITR recovery uses a DB+CAS completeness check;
 10. telemetry exposes duplicate suppression, stale fencing, unknown commit, outbox age, CAS integrity and recovery failures;
-11. kill -9/network/disk-full/restore drills pass without duplicate canonical facts or silent missing evidence.
+11. kill -9/network/disk-full/restore drills pass without duplicate canonical facts or silent missing evidence;
+12. canonical write paths have not disabled PostgreSQL fsync/synchronous commit durability.
