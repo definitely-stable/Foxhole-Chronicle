@@ -73,14 +73,19 @@ Example:
 
 `GET /api/v1/wars/140/timeline?metric=casualties&from=...&to=...&resolution=auto`
 
-Supported resolution contract:
+Supported generic resolution contract:
 
 - `auto`
-- `5m`
+- `native`
+- `15m`
 - `1h`
 - `1d`
 
-A requested resolution MAY be rejected/downgraded if historical source coverage cannot support it. The response MUST state effective resolution.
+Under `chronicle-collection-v1`, ordinary warReport/dynamic-derived high resolution is 15 minutes.
+
+A finer resolution such as `5m` MAY exist only for a metric/dataset whose actual supporting observations permit it. Chronicle MUST NOT upsample 15m evidence and label it 5m data.
+
+A requested resolution MAY be rejected/downgraded if source/collection/historical coverage cannot support it. The response MUST state effective resolution and collection profile.
 
 ## 4. Envelope metadata
 
@@ -92,7 +97,7 @@ Analytical responses SHOULD include:
   "meta": {
     "dataAsOf": "2026-09-19T12:00:00Z",
     "freshnessState": "fresh",
-    "resolution": "5m",
+    "resolution": "15m",
     "collectionProfileVersion": "chronicle-collection-v1",
     "coverageRatio": 0.99,
     "qualityClass": "high",
@@ -294,6 +299,8 @@ Every CSV export MUST document:
 
 Large bulk datasets MAY be prepared as immutable export artifacts with an export manifest.
 
+For sealed wars, Parquet + ZSTD MAY be published as a bulk analytical projection alongside CSV where useful. Parquet is not the request-time source of truth and MUST identify archive revision, schema/version metadata, collection profile and content hash.
+
 ## 11. Public OpenAPI
 
 - `GET /api/openapi/v1.json`
@@ -366,3 +373,5 @@ Readiness MUST consider database/API health; upstream War API outage alone SHOUL
 13. Partial Day-vs-Day comparison mode is explicit.
 14. Boundary-ambiguous poll-derived changes are distinguishable from exact-single-bucket changes.
 15. Observation-sensitive analytics expose `collectionProfileVersion` separately from output resolution.
+16. Generic timeline resolution cannot claim finer granularity than the supporting collection/source evidence.
+17. Sealed-war bulk artifacts expose archive revision and content hash.
