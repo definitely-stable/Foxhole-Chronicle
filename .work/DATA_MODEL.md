@@ -283,7 +283,7 @@ The endpoint cursor and endpoint poll-state tables MUST use identical semantic-k
 
 - `operation_id uuid PK` — physical UUIDv7 row identity
 - `operation_key text UNIQUE NOT NULL` — deterministic idempotency identity
-- `operation_kind text NOT NULL` — e.g. canonical_ingest / reprocess
+- `operation_kind text NOT NULL` — `canonical_ingest` in v1
 - `input_fingerprint char(64) NOT NULL`
 - `ingestion_attempt_id uuid NOT NULL FK`
 - `endpoint_cursor_id uuid NOT NULL FK`
@@ -296,7 +296,11 @@ The endpoint cursor and endpoint poll-state tables MUST use identical semantic-k
 - `created_at timestamptz NOT NULL`
 - `committed_at timestamptz NULL`
 
-The deterministic `operation_key`, endpoint cursor fence and unique constraints are authoritative for retry/restart reconciliation. `operation_id` is physical identity and MUST NOT be the only way to rediscover the same intended operation after process loss. PostgreSQL transaction ID/status is supplemental evidence, not the sole idempotency mechanism.
+For v1 canonical ingestion:
+
+`operation_key = "canonical_ingest:" + fetch_id`
+
+The deterministic `operation_key`, endpoint cursor fence and unique constraints are authoritative for retry/restart reconciliation. Lease/fence values are provenance/authorization checks, not part of operation identity. `input_fingerprint` records the interpretation/version set that actually committed. `operation_id` is physical identity and MUST NOT be the only way to rediscover the same intended operation after process loss. PostgreSQL transaction ID/status is supplemental evidence, not the sole idempotency mechanism.
 
 ### 4.4 Fetch metadata
 
@@ -336,7 +340,7 @@ A `304` MUST NOT create a duplicate normalized observation, but SHOULD reference
 
 A successful HTTP response that Chronicle intends to preserve crosses the **raw-durable boundary** when its `source_fetches` evidence and exact `source_payloads` reference/bytes have committed in a short raw-capture transaction. Canonical normalization/reconciliation happens in a later short transaction. This prevents a Worker crash after receiving a transient response from erasing the only Chronicle copy of that source state.
 
-The relationship is one-way: a fetch MAY participate in multiple reconciliation/reprocessing operations over time. `reconciliation_operations.fetch_id` owns that linkage; `source_fetches` MUST NOT hold a back-reference to one reconciliation operation.
+The relationship is one-way: a fetch has at most one v1 `canonical_ingest` reconciliation operation, enforced by deterministic `operation_key`. Later explicit reprocessing may reference the same fetch through its own versioned run/evidence records. `reconciliation_operations.fetch_id` owns the canonical-ingest linkage; `source_fetches` MUST NOT hold a back-reference to one reconciliation operation.
 
 ### 4.5 Raw payloads
 
