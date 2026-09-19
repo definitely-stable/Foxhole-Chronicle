@@ -290,9 +290,9 @@ See [CORE_WAR_EXPERIENCE.md](./CORE_WAR_EXPERIENCE.md) and [ANALYTICS.md](./ANAL
 
 ## 9. API
 
-Chronicle exposes a versioned public REST API and CSV exports.
+P0 uses a locale-neutral first-party application REST contract under `/api/app`. Stable external resources are published under `/api/v1` only as an explicit P1 compatibility commitment.
 
-OpenAPI 3.1 is the canonical machine-readable contract. ASP.NET Core generates the document at build time; openapi-typescript generates TypeScript transport types and openapi-fetch is the default frontend client. Handwritten duplicate API DTOs SHOULD NOT be maintained in the web app.
+OpenAPI 3.1 is the canonical machine-readable application contract. ASP.NET Core generates the P0 application document at build time; openapi-typescript generates TypeScript transport types and openapi-fetch is the default frontend client. Handwritten duplicate API DTOs SHOULD NOT be maintained in the web app.
 
 Caddy exposes one public origin:
 
