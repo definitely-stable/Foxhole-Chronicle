@@ -120,7 +120,8 @@ Replay is historical visualization, not tactical live-map functionality.
 
 Public UI routes are locale-prefixed.
 
-- /{locale}/ — Current War
+- /{locale}/ — Current War entry / default-or-remembered shard resolution
+- /{locale}/current/{shard} — canonical Current War surface
 - /{locale}/wars — war selector/archive index
 - /{locale}/war/{chronicleWarId} — War Timeline / canonical war workspace
 - /{locale}/war/{chronicleWarId}/replay — War Replay
@@ -138,7 +139,9 @@ Public UI routes are locale-prefixed.
 
 The machine API remains under unlocalized /api/v1/*.
 
-The canonical war UI route uses Chronicle UUID, not unqualified war number.
+The canonical Current War route is shard-aware. The locale root is only a convenience entry and MUST NOT imply one globally unique current war.
+
+The canonical historical war UI route uses Chronicle UUID, not unqualified war number.
 
 ## 8. Current War
 
