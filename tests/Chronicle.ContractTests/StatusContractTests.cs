@@ -15,13 +15,15 @@ public sealed class StatusContractTests : IClassFixture<WebApplicationFactory<Pr
     }
 
     [Fact]
-    public async Task Application_status_is_available_under_the_app_contract()
+    public async Task ApplicationStatusIsAvailableUnderTheAppContract()
     {
-        using var response = await _client.GetAsync("/api/app/status");
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var response = await _client.GetAsync("/api/app/status", cancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadFromJsonAsync<AppStatusResponse>();
+        var body = await response.Content.ReadFromJsonAsync<AppStatusResponse>(
+            cancellationToken);
 
         Assert.NotNull(body);
         Assert.Equal("foxhole-chronicle-api", body.Service);
