@@ -62,7 +62,7 @@ No numeric official request-rate limit is documented in the current README, so C
 
 Canonical pipeline:
 
-`schedule -> fetch -> persist fetch metadata -> deduplicate payload -> normalize -> validate -> reconcile -> persist facts -> detect observed changes -> aggregate -> derive metrics -> analytical models -> cache invalidation -> share/export`
+`schedule -> fetch -> persist fetch metadata -> deduplicate payload -> normalize -> validate -> persist source items -> source-anomaly gate -> identity candidate generation -> identity resolution -> persist canonical observations -> detect observed changes -> aggregate -> derive metrics -> analytical models -> cache invalidation -> share/export`
 
 Each stage MUST be replayable from a durable predecessor whenever practical.
 
@@ -345,7 +345,46 @@ Negative casualty deltas MUST NOT enter normal casualty-rate aggregates.
 
 Even though secondary Foxhole documentation describes it as unique players per map, the official README does not define global uniqueness semantics. Chronicle MUST NOT sum maps and expose the result as global unique players or faction population.
 
-## 17. War lifecycle handling
+## 17. Objective identity pipeline
+
+Identity resolution is a first-class ingestion stage defined by [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md).
+
+For each valid changed static/dynamic payload:
+
+1. persist immutable `source_item_observations`;
+2. classify raw items through the current taxonomy version;
+3. run source-level anomaly checks before item-level state mutation;
+4. generate within-war identity candidates;
+5. calculate deterministic feature vectors/scores;
+6. persist all serious candidates;
+7. auto-accept only when score threshold **and** best-vs-second-best ambiguity margin pass;
+8. persist ambiguous/unmatched decisions without guessing;
+9. materialize `objective_observations` only for accepted resolution decisions;
+10. derive state intervals and ObservedChanges from accepted valid observations.
+
+`teamId`, mutable flags and one-sample presence/absence MUST NOT serve as durable identity keys.
+
+A single missing dynamic item does not tombstone or delete a canonical objective.
+
+### 17.1 Matcher reprocessing
+
+Matcher/taxonomy upgrades run against preserved source item observations and produce a new `identity_resolution_version`.
+
+Reprocessing MUST:
+
+- preserve old candidates/decisions;
+- generate a diff of reassigned/newly-resolved/newly-ambiguous items;
+- identify splits/merges;
+- queue targeted recomputation for objective history and dependent metrics;
+- preserve canonical permalink continuity through aliases/superseded identities.
+
+### 17.2 Manual review
+
+Ambiguous cases are reviewable without editing raw evidence.
+
+Manual actions are append-only and reversible. Merge/split/reassignment MUST enqueue downstream invalidation/recomputation.
+
+## 18. War lifecycle handling
 
 New war detection is based on official `warId` within shard.
 
@@ -372,7 +411,7 @@ else:
 
 `warNumber` alone MUST NOT trigger a transition.
 
-## 18. Backfill and reprocessing
+## 19. Backfill and reprocessing
 
 ### Backfill
 
@@ -384,7 +423,7 @@ Re-runs normalization/derivation over already captured immutable input using a n
 
 Reprocessing MUST write new versioned derived outputs or atomically supersede old outputs according to metric/model lifecycle rules. It MUST NOT destroy reproducibility.
 
-## 19. Freshness classes
+## 20. Freshness classes
 
 Recommended product freshness states:
 
@@ -395,7 +434,7 @@ Recommended product freshness states:
 
 Every live API response SHOULD expose `data_as_of` and `freshness_state`.
 
-## 20. Observability
+## 21. Observability
 
 Worker MUST emit:
 
@@ -415,7 +454,7 @@ Worker MUST emit:
 - retry/circuit state;
 - historical import counts.
 
-## 21. Security boundaries
+## 22. Security boundaries
 
 The ingestion worker MUST use an allowlist of configured upstream hosts.
 
@@ -427,7 +466,7 @@ Response size/time limits MUST be enforced.
 
 Raw source text MUST be treated as untrusted input before rendering.
 
-## 22. Acceptance criteria
+## 23. Acceptance criteria
 
 Before backend feature work depends on ingestion:
 
@@ -446,3 +485,8 @@ Before backend feature work depends on ingestion:
 13. Cross-endpoint batches retain per-fetch timestamps and do not claim atomicity.
 14. Targeted recomputation works after a late correction.
 15. Source provenance is queryable for every normalized historical fact.
+16. Identity auto-match requires both a versioned score threshold and an ambiguity margin.
+17. Matcher thresholds are calibrated from a labeled corpus, not hard-coded from unverified examples.
+18. One missing dynamic observation cannot tombstone a canonical identity.
+19. Matcher v1/v2 can be replayed and diffed without destroying old evidence.
+20. Ambiguous identity observations do not silently enter objective-derived analytics.
