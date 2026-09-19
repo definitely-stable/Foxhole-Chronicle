@@ -3,7 +3,8 @@
     "currentWar": "Current War",
     "wars": "Wars",
     "regions": "Regions",
-    "archive": "Archive"
+    "archive": "Archive",
+    "label": "Primary navigation"
   },
   "Home": {
     "eyebrow": "Strategic data observatory",
