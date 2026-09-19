@@ -187,13 +187,13 @@ This separation is mandatory.
 Key rules:
 
 1. Polling bounds a change to an observation interval; it does not prove exact in-game event time.
-2. War-relative elapsed time is distinct from UTC calendar date and from any upstream game-day field.
+2. War-relative elapsed time is distinct from UTC calendar date and from any upstream game-day field; canonical bucket boundaries follow TIME_SEMANTICS.md.
 3. Objective identity is Chronicle-owned unless a stable upstream identifier is explicitly verified.
 4. Every derived metric/model is deterministic, reproducible and versioned.
 5. Coverage and provenance are first-class data.
 6. Historical sources may have lower resolution and MUST be labeled accordingly.
 
-Official source semantics are fixed in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Domain/storage rules are in [DATA_MODEL.md](./DATA_MODEL.md), [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md), and [METRICS.md](./METRICS.md).
+Official source semantics are fixed in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Canonical war-relative clock/bucket semantics are fixed in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md). Domain/storage rules are in [DATA_MODEL.md](./DATA_MODEL.md), [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md), and [METRICS.md](./METRICS.md).
 
 ## 7. Current and historical data
 
@@ -326,7 +326,9 @@ Required test layers:
 
 ## 15. Authoritative design documents
 
-- [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md)\n- [DATA_MODEL.md](./DATA_MODEL.md)
+- [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md)
+- [TIME_SEMANTICS.md](./TIME_SEMANTICS.md)
+- [DATA_MODEL.md](./DATA_MODEL.md)
 - [INGESTION.md](./INGESTION.md)
 - [HISTORICAL_DATA.md](./HISTORICAL_DATA.md)
 - [METRICS.md](./METRICS.md)
@@ -342,6 +344,8 @@ Architecture decisions are recorded under [adr/](./adr/).
 
 Before writing core backend domain/data code, the following MUST be reviewed and internally consistent:
 
+- WAR_API_SEMANTICS.md
+- TIME_SEMANTICS.md
 - DATA_MODEL.md
 - INGESTION.md
 - OBJECTIVE_IDENTITY.md
