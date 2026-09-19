@@ -452,6 +452,8 @@ Replay legend MUST distinguish at least:
 - last-known current-edge state;
 - insufficient coverage.
 
+Replay coordinate/layout semantics are defined in [MAP_PRESENTATION.md](./MAP_PRESENTATION.md).
+
 The map is contextual and historical. It MUST NOT grow into:
 
 - route planning;
@@ -462,7 +464,7 @@ The map is contextual and historical. It MUST NOT grow into:
 
 ## 10. Replay API shape
 
-The public/first-party API SHOULD expose three replay-oriented resources.
+The P0 first-party application API exposes three replay-oriented resources. Selected equivalents may be published later under the stable public API.
 
 ### 10.1 Manifest
 
