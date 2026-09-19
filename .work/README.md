@@ -101,17 +101,22 @@ This index does not add a new documentation CI/gate policy.
 
 ## Core product implementation order
 
-The P0 vertical path is intentionally product-first:
+The P0 vertical path is intentionally product-first and begins with two parallel tracks:
 
 ~~~text
-War API
-  -> durable source observations
-  -> current war identity/state
-  -> Timeline foundation
-  -> objective historical state
-  -> Replay projection
-  -> unified Current War / Timeline / Replay web experience
+Track A                         Track B
+war + warReport                 static/dynamic collection
+  -> Current War                  -> labeled objective corpus
+  -> Timeline counters            -> matcher calibration/golden fixtures
+                 \              /
+                  objective history
+                        ->
+                      Replay
+                        ->
+        unified Current War / Timeline / Replay
 ~~~
+
+Production objective Replay MUST NOT bypass the objective-identity calibration gate by guessing thresholds.
 
 Do not implement Compare/Records/DNA/Phases first and postpone the product's central Timeline/Replay experience.
 
@@ -164,7 +169,7 @@ Replay therefore separates state value from evidence strength and distinguishes 
 
 The War API source-semantics contract is materialized in `WAR_API_SEMANTICS.md`.
 
-Objective identity research is integrated into `OBJECTIVE_IDENTITY.md`, `DATA_MODEL.md`, `INGESTION.md`, `METRICS.md`, `ANALYTICS.md` and `PUBLIC_API.md`. Production matcher thresholds remain intentionally uncommitted until calibration against a labeled real-payload corpus.
+Objective identity research is integrated into `OBJECTIVE_IDENTITY.md`, `DATA_MODEL.md`, `INGESTION.md`, `METRICS.md`, `ANALYTICS.md` and `PUBLIC_API.md`. Production matcher thresholds remain intentionally uncommitted until calibration against a labeled real-payload corpus; collecting/calibrating that corpus is now an explicit early P0 workstream.
 
 ### Time semantics
 
