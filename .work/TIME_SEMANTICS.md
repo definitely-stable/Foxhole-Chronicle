@@ -250,6 +250,23 @@ Derived time-relative aggregates/results MUST include:
 
 Raw observations are never rewritten to "move them to another day"; buckets are recomputed.
 
+## 10.1 Backend implementation types
+
+Chronicle's .NET implementation SHOULD use NodaTime:
+
+- Instant for absolute source/observation/canonical UTC instants;
+- Duration for elapsed durations;
+- LocalDate only for date-without-time concepts;
+- ZonedDateTime/DateTimeZone only when an explicit display/user timezone is required.
+
+Npgsql.EntityFrameworkCore.PostgreSQL.NodaTime is the PostgreSQL/EF mapping baseline. NodaTime.Serialization.SystemTextJson provides explicit JSON serialization.
+
+System.TimeProvider is the only approved application source of "now". Domain/application services SHOULD NOT call DateTime.UtcNow or DateTimeOffset.UtcNow directly.
+
+TimeProvider is a clock abstraction; NodaTime is the value/domain model. They are complementary.
+
+Public API serialization remains ISO-8601 UTC and MUST preserve the existing API contract regardless of internal CLR type.
+
 ## 11. Canonical time fields and naming
 
 ### Source/fetch layer

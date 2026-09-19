@@ -62,28 +62,34 @@ v1 MUST NOT introduce Redis, Kafka, RabbitMQ, Kubernetes, TimescaleDB, GraphQL o
 
 ## 3. Technology baseline
 
-Working baseline, pending final version verification from official project documentation:
+Verified platform baseline for the September 2026 bootstrap:
 
 - Next.js 16.x
 - React 19.x
 - TypeScript
 - next-intl for UI localization / locale routing
+- openapi-typescript + openapi-fetch for generated frontend API contracts
+- nuqs 2.x for shareable analytical URL state
+- Zod 4 for narrow untyped web runtime boundaries
 - supported Node.js LTS
 - Tailwind CSS 4.x
 - Radix UI primitives
 - TanStack Query only for truly client-live/interactively refreshed surfaces
+- TanStack Table 9.x only when feature-rich data tables are implemented
 - Apache ECharts 6.1+
 - ASP.NET Core / .NET 10 LTS
 - C# 14
-- PostgreSQL 18.x
+- EF Core 10 + Npgsql 10 hybrid data access
+- NodaTime for canonical backend time types
+- PostgreSQL 18.x with pg_stat_statements
 - pgBackRest for physical backup/WAL-PITR management
 - Zstandard for external raw/archive compression
 - Apache Parquet for sealed analytical exports only
 - Caddy
 - Docker Compose
-- OpenTelemetry
+- OpenTelemetry / OTLP
 
-Version assertions MUST be pinned by the final research pass before production bootstrap. Backup/archive tooling versions MUST also be compatibility-tested against the selected PostgreSQL/runtime image.
+Supported major lines and dependency decisions are defined in [PLATFORM_DEPENDENCIES.md](./PLATFORM_DEPENDENCIES.md). Patch versions are selected at implementation/bootstrap time from the latest compatible supported patch. Backup/archive tooling versions MUST also be compatibility-tested against the selected PostgreSQL/runtime image.
 
 ## 4. Repository structure
 
@@ -258,7 +264,7 @@ See [ANALYTICS.md](./ANALYTICS.md).
 
 Chronicle exposes a versioned public REST API and CSV exports.
 
-OpenAPI is the canonical machine-readable contract. Frontend TypeScript clients SHOULD be generated from it.
+OpenAPI 3.1 is the canonical machine-readable contract. ASP.NET Core generates the document at build time; openapi-typescript generates TypeScript transport types and openapi-fetch is the default frontend client. Handwritten duplicate API DTOs SHOULD NOT be maintained in the web app.
 
 Caddy exposes one public origin:
 
@@ -271,18 +277,26 @@ Browser CORS is therefore unnecessary for the first-party UI. Public third-party
 
 See [PUBLIC_API.md](./PUBLIC_API.md).
 
-## 10. Caching
+## 10. Web runtime and caching
 
 Caching layers have separate responsibilities:
 
 1. PostgreSQL stores canonical queryable truth.
 2. ASP.NET Core Output Cache caches API responses.
-3. Next.js caching/ISR/RSC optimizes presentation and historical pages.
+3. Next.js 16 Cache Components cache explicitly selected server rendering/data work.
 4. Browser cache follows API/page Cache-Control.
+
+Next.js v1 SHOULD use the Cache Components model (cacheComponents + use cache/cacheLife/cacheTag), not treat legacy ISR route configuration as the primary architecture.
+
+Current-war surfaces use short bounded caching. Sealed historical facts may use long caching. v1 does not require Redis or distributed Next.js cache coordination because the baseline has one Next.js instance.
+
+Analytical/shareable view state is encoded in query parameters through typed nuqs parsers; canonical entity identity remains in the pathname.
 
 TanStack Query MUST NOT become a second universal data-fetching architecture. Use it only where client interaction/live refresh justifies it.
 
 Live/phase-2 Event Stream MAY use SSE if product freshness needs justify it.
+
+See [WEB_RUNTIME.md](./WEB_RUNTIME.md).
 
 ## 11. Storage
 
@@ -345,43 +359,27 @@ A guaranteed 99.9% availability claim is inappropriate for a non-redundant singl
 
 ## 13. Security
 
-The site is public/read-heavy.
+The site is public/read-heavy. The security baseline covers ingestion SSRF/redirect controls, CSP/security headers, server/client secret boundaries, API rate/time limits, request-size limits, database exposure and future operator-plane separation.
 
-Primary threats include:
-
-- ingestion SSRF/open redirect abuse;
-- untrusted source text/XSS;
-- public API abuse;
-- secret leakage;
-- database exposure;
-- supply-chain/dependency vulnerabilities;
-- malicious/oversized upstream payloads.
-
-Worker outbound requests MUST use allowlisted hosts.
+Worker outbound requests MUST use allowlisted hosts and redirect validation.
 
 Database MUST not be publicly exposed.
 
 Containers SHOULD run non-root and read-only where practical.
 
+See [SECURITY.md](./SECURITY.md).
+
 ## 14. Testing
 
-Required test layers:
+The concrete baseline uses xUnit v3, Testcontainers.PostgreSql with PostgreSQL 18, FakeTimeProvider, Vitest/React Testing Library, Playwright, axe and k6 where appropriate.
 
-- unit;
-- parser fixtures;
-- metric/model golden datasets;
-- PostgreSQL integration via Testcontainers;
-- source contract tests;
-- migration tests;
-- OpenAPI compatibility;
-- Playwright;
-- accessibility;
-- load tests;
-- backup restore drills;
-- kill -9/network-cut/disk-full crash-recovery tests;
-- unknown-COMMIT fault injection;
-- outbox duplicate-effect tests;
-- PITR + external-CAS referential-completeness drills.
+Async Server Component behavior is verified through browser/E2E tests rather than relying on Vitest alone.
+
+Database correctness tests MUST use PostgreSQL for PostgreSQL-specific locks, isolation, mappings, constraints and migrations.
+
+Crash-recovery, unknown-COMMIT, outbox duplicate-effect, PITR and DB-to-CAS completeness tests remain required.
+
+See [TESTING.md](./TESTING.md).
 
 ## 15. Authoritative design documents
 
@@ -396,6 +394,12 @@ Required test layers:
 - [ANALYTICS.md](./ANALYTICS.md)
 - [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md)
 - [PUBLIC_API.md](./PUBLIC_API.md)
+- [LOCALIZATION.md](./LOCALIZATION.md)
+- [WEB_RUNTIME.md](./WEB_RUNTIME.md)
+- [PLATFORM_DEPENDENCIES.md](./PLATFORM_DEPENDENCIES.md)
+- [OBSERVABILITY.md](./OBSERVABILITY.md)
+- [SECURITY.md](./SECURITY.md)
+- [TESTING.md](./TESTING.md)
 - [DATA_LICENSING.md](./DATA_LICENSING.md)
 - [PRODUCT_SCOPE.md](./PRODUCT_SCOPE.md)
 

@@ -27,6 +27,21 @@ Durability/control relations such as ingestion jobs/attempts, reconciliation ope
 
 Chronicle uses internal immutable identifiers even when an upstream source provides an identifier.
 
+### 2.0 Chronicle UUID generation
+
+Chronicle-owned UUID identifiers SHOULD use UUIDv7 unless a specific identity has a stronger natural/content-derived representation.
+
+Application-generated IDs use .NET 10 Guid.CreateVersion7 through a project-owned ID factory where useful. PostgreSQL 18 uuidv7() MAY be used for rows created wholly inside the database.
+
+Rules:
+
+- an idempotency/operation ID is generated once and reused for the same logical operation;
+- retries MUST NOT regenerate identity merely because UUID generation is cheap;
+- UUIDv7 ordering MUST NOT be interpreted as authoritative event time;
+- source natural IDs, SHA-256 payload identity and semantic fingerprints remain separate from Chronicle UUID identity.
+
+Append-heavy relations such as fetches, attempts, observations, reconciliation operations and outbox jobs are especially suitable for UUIDv7.
+
 ### 2.1 War
 
 `wars`

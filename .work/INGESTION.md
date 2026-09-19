@@ -173,7 +173,13 @@ ETag is a transport/cache validator. SHA-256 is Chronicle's durable payload iden
 
 Local `captured_at` MUST NOT be the idempotency key.
 
-v1 MUST NOT use transparent HTTP retries that hide multiple network exchanges behind one provenance record. Timeouts, concurrency limits and circuit-breaking may be automatic; after a failed exchange, a retry is represented by a new ingestion attempt/fetch.
+v1 MUST NOT use transparent HTTP retries that hide multiple network exchanges behind one provenance record.
+
+The official-source HttpClient SHOULD use Microsoft.Extensions.Http.Resilience through a custom AddResilienceHandler pipeline containing only bounded concurrency/rate limiting, total/per-attempt timeout and circuit breaking. The default standard handler MUST NOT be used unchanged because it contains transparent retry.
+
+Hedging is disabled.
+
+After a failed exchange, retry is represented by a new Chronicle ingestion attempt/fetch scheduled through durable worker state. One audited HTTP exchange remains one source_fetch.
 
 ## 7. Source timestamps and map revisions
 
