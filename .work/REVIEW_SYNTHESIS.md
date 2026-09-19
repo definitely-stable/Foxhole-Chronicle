@@ -50,6 +50,26 @@ Resolved baseline:
 - boundary-crossing polling uncertainty is not assigned to a fake exact day;
 - source-time corrections create a new war-time revision and trigger deterministic recomputation.
 
+### Collection cadence and storage
+
+The 2026-09-19 cadence/storage analysis is materialized in [adr/collection-cadence-and-storage.md](./adr/collection-cadence-and-storage.md) and [research/COLLECTION_CADENCE_STORAGE_ANALYSIS_2026-09-19.md](./research/COLLECTION_CADENCE_STORAGE_ANALYSIS_2026-09-19.md).
+
+Accepted baseline:
+
+- `chronicle-collection-v1`;
+- war 5m;
+- warReport 15m/map;
+- dynamic/public 15m/map;
+- maps 60m plus transition/reconciliation triggers;
+- static once per war/map;
+- 30 active maps/shard for initial capacity planning;
+- 6,072 scheduled regular requests/day/shard at that baseline;
+- fixed cadence/no hot mode in v1;
+- replay-critical unique raw payloads retained in compressed content-addressed storage;
+- PostgreSQL stores sparse semantic/item history rather than every unchanged item occurrence;
+- 15m -> 30m -> 60m downsampling analysis is required before relaxing cadence.
+
+Precise GB/year is intentionally not treated as known until real payload, compression, semantic-change and relation/index growth are measured.
 ### Objective identity
 
 Chronicle-owned objective identity is now an accepted requirement because the official map-item schema has no stable objective ID. Coordinate tolerance and cross-war matching still require calibration against a real payload corpus before being treated as collision-free.
