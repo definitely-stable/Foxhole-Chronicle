@@ -2,7 +2,7 @@
 
 Status: **Authoritative working specification**
 
-Every derived metric in Chronicle MUST have a stable key, explicit formula, unit, input requirements, aggregation semantics, minimum coverage and algorithm version.
+Every derived metric in Chronicle MUST have a stable key, explicit formula, unit, input requirements, aggregation semantics, minimum coverage and algorithm version. Time-indexed metrics additionally bind to [TIME_SEMANTICS.md](./TIME_SEMANTICS.md), `time_semantics_version` and `war_time_revision`.
 
 ## 1. Registry contract
 
@@ -39,7 +39,13 @@ Downsampling MUST preserve bucket endpoints and SHOULD preserve extrema when cha
 
 Example: casualties gained during interval.
 
-Bucket aggregation: `sum(valid_deltas)`.
+For adjacent valid cumulative-counter observations:
+
+`delta(t0,t1) = value(t1) - value(t0)`
+
+A delta MAY contribute to one analytical bucket only when its observation interval is contained within that bucket under the metric's gap policy.
+
+If the interval crosses a bucket boundary, v1 marks the delta boundary-ambiguous and does not linearly/probabilistically split it.
 
 Negative deltas MUST be treated as correction/reset/anomaly according to source reconciliation rules, not blindly summed.
 
@@ -57,7 +63,9 @@ Do not average already-averaged rates when the denominator differs. Recompute fr
 
 Example: observed objective state changes.
 
-Bucket aggregation: count of qualifying observed changes, with coverage attached.
+Bucket aggregation counts only changes whose polling uncertainty interval can be assigned to one bucket.
+
+Boundary-crossing changes are exposed separately as ambiguous/unallocated counts and MUST NOT be silently attributed to the later observation's bucket.
 
 ### Ratios
 
@@ -205,25 +213,55 @@ A matcher-version change that reassigns objective observations MUST invalidate o
 
 ## 4. Day vs Day metrics
 
-Day-vs-Day uses elapsed war day.
+Day-vs-Day uses Chronicle elapsed war day from TIME_SEMANTICS.md.
 
 For day N:
 
-- start = `conquest_start + (N-1)*24h`
-- end = `conquest_start + N*24h`
+- `start = conquest_start + (N-1)*24h`
+- `end_exclusive = conquest_start + N*24h`
 
-Partial current days MUST be labeled partial.
+The interval is half-open.
+
+A completed war ending exactly at `end_exclusive` has a complete Day N and does not create Day N+1.
+
+### 4.1 Partial-day modes
+
+For an active current day:
+
+- `partial_as_is`: return the observed current interval and label it partial;
+- `like_for_like_fraction`: compare historical Day N only through the same elapsed fraction of that day.
+
+Like-for-like mode requires historical resolution capable of cutting at that elapsed instant. Daily-only source aggregates are not eligible.
+
+### 4.2 Daily counters
+
+Casualty delta/rate uses only valid covered counter intervals according to the metric version.
+
+A cumulative value "at boundary" MUST expose the actual supporting observation time and boundary age when no exact-boundary sample exists. No silent interpolation.
+
+### 4.3 Daily observed changes
+
+- uncertainty interval fully inside Day N -> exact Day N count;
+- uncertainty interval crosses Day N boundary -> boundary-ambiguous and excluded from exact Day N count by default.
 
 Comparison metrics SHOULD include:
 
-- cumulative casualties at elapsed boundary;
-- casualties during day;
-- casualty rate during day;
-- observed objective changes during day;
+- cumulative casualties near elapsed boundary with supporting timestamp;
+- observed casualties during covered interval;
+- casualty rate over covered elapsed time;
+- exact-bucket observed objective changes;
+- boundary-ambiguous objective changes;
 - active-region count;
 - optional region concentration.
 
-Each value includes source coverage. Objective-derived values additionally include identity coverage and the active identity resolution version.
+Each value includes:
+
+- source coverage;
+- `dayStatus`;
+- `daySpanFraction`;
+- `timeSemanticsVersion`;
+- `warTimeRevision`;
+- identity coverage/version when objective-derived.
 
 ## 5. War DNA dimensions
 
@@ -333,7 +371,10 @@ Records MUST specify:
 - cohort;
 - time period;
 - minimum coverage;
+- applicable time semantics/version;
 - whether record is all-time historical or "recorded since WC…".
+
+Longest/shortest-war records MUST sort by exact completed conquest duration, not rounded elapsed-day count.
 
 A record MUST NOT compare incompatible resolution tiers without an explicit policy.
 
@@ -347,6 +388,8 @@ Every metric API value SHOULD include:
 - `quality_class`
 - `data_as_of`
 - `metric_version`
+- `time_semantics_version` when time-indexed
+- `war_time_revision` when war-relative
 - `identity_resolution_version` when objective-derived
 - `identity_coverage` when objective-derived
 
@@ -393,3 +436,7 @@ A metric is shippable only when:
 8. UI wording does not overstate what the metric proves.
 9. Objective-derived metrics declare identity-resolution dependencies and minimum identity coverage.
 10. Matcher reprocessing invalidates affected derived results deterministically.
+11. Time-indexed metrics bind to `time_semantics_version` and `war_time_revision`.
+12. Boundary-crossing poll intervals are not silently assigned to a day/bucket.
+13. Rates divide by covered elapsed time, not theoretical bucket duration when coverage is incomplete.
+14. Completed duration records use exact elapsed duration rather than rounded day count.
