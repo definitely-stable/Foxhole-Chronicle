@@ -18,6 +18,7 @@ See:
 - [INGESTION.md](../INGESTION.md)
 - [DATA_MODEL.md](../DATA_MODEL.md)
 - [OBJECTIVE_IDENTITY.md](../OBJECTIVE_IDENTITY.md)
+- [DATA_LIFECYCLE.md](../DATA_LIFECYCLE.md)
 - [research/COLLECTION_CADENCE_STORAGE_ANALYSIS_2026-09-19.md](../research/COLLECTION_CADENCE_STORAGE_ANALYSIS_2026-09-19.md)
 
 ## Decision
@@ -72,11 +73,15 @@ These are schedule counts, not guaranteed HTTP transfer counts.
 Chronicle separates:
 
 1. **fetch/validation metadata** in PostgreSQL;
-2. **immutable compressed unique raw payloads** in content-addressed external/persistent storage;
+2. **exact raw payload evidence** through one hybrid payload abstraction:
+   - small payloads MAY be inline PostgreSQL `bytea`;
+   - larger payloads use Zstandard-compressed external CAS;
 3. **sparse relational semantic history** in PostgreSQL;
 4. **derived aggregates/models** in PostgreSQL.
 
-The immutable raw payload archive is the complete replay evidence.
+Exact raw payload evidence is the complete replay basis. Physical storage kind is an implementation policy and does not change source content identity.
+
+Detailed archival/recovery behavior is owned by DATA_LIFECYCLE.md and adr/data-lifecycle-and-recovery.md.
 
 PostgreSQL MUST NOT durably expand every unchanged map item occurrence from every changed snapshot merely for replayability.
 
@@ -129,7 +134,7 @@ Cadence may change only after measuring:
 - Normal dynamic/war-report uncertainty is about 15 minutes under healthy collection, but outages/cache restrictions can widen it.
 - A transient state wholly between two polls remains fundamentally unobservable.
 - PostgreSQL growth is driven by semantic change and analytical history rather than `polls × all_items`.
-- Raw archive growth is measurable independently from relational DB growth.
+- Raw evidence growth is measured separately by inline bytes and external original/compressed bytes.
 - Objective Identity reprocessing reads raw archived snapshots when full occurrence reconstruction is required.
 
 ## Rejected alternatives
