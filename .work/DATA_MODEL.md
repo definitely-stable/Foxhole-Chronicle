@@ -2,7 +2,7 @@
 
 Status: **Authoritative working specification — War API, Objective Identity, Time Semantics and collection/storage profile integrated 2026-09-19**
 
-This document defines the logical data model for Foxhole Chronicle. Official runtime source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md).
+This document defines the logical data model for Foxhole Chronicle. Official runtime source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Durable payload/archive/recovery semantics are defined in [DATA_LIFECYCLE.md](./DATA_LIFECYCLE.md).
 
 ## 1. Core principles
 
@@ -191,25 +191,37 @@ A batch groups collection work but is **not** an atomic world snapshot.
 
 A fetch is one HTTP interaction. A `304` MUST NOT create a duplicate normalized observation, but SHOULD reference the previously accepted representation through `representation_payload_id` so coverage can use the validation instant.
 
-### 4.4 Content-addressed raw payloads
+### 4.4 Raw payloads
 
-`source_payloads`
+`source_payloads` is one logical exact-payload abstraction with hybrid physical storage.
 
 - `id uuid PK`
 - `source_id uuid FK`
 - `content_hash char(64) NOT NULL`
 - `encoding text NOT NULL`
-- `compression text NULL`
-- `storage_ref text NOT NULL`
+- `storage_kind text NOT NULL` — `inline` or `external_cas`
+- `inline_bytes bytea NULL` — exact original response bytes
+- `compression text NULL` — external storage compression, normally `zstd`
+- `storage_ref text NULL`
+- `size_bytes bigint NOT NULL` — original bytes
+- `stored_size_bytes bigint NULL`
 - `first_seen_at timestamptz NOT NULL`
 - `last_seen_at timestamptz NOT NULL`
-- `size_bytes bigint NOT NULL`
 
 Unique: `(source_id, content_hash)`.
 
-ETag is metadata/transport validation, not payload identity.
+Constraints:
 
-Replay-critical unique payloads are retained long-term in content-addressed compressed storage. PostgreSQL stores metadata/identity, not the default full payload body.
+- `storage_kind=inline` -> `inline_bytes IS NOT NULL` and `storage_ref IS NULL`;
+- `storage_kind=external_cas` -> `storage_ref IS NOT NULL` and `inline_bytes IS NULL`.
+
+`content_hash` is SHA-256 of the exact original response bytes before compression.
+
+Storage kind is an implementation concern and MUST NOT change payload identity.
+
+Default v1 policy is measurement-driven: small war/maps/warReport responses are candidates for inline storage; dynamic/static and oversized responses are candidates for external CAS.
+
+ETag is metadata/transport validation, not payload identity. Replay-critical unique payloads are retained long-term.
 
 ## 5. Official source observations
 
@@ -290,6 +302,24 @@ Recommended uniqueness:
 `(war_id, region_id, map_kind, content_hash, normalizer_version)`
 
 A source map `version` is preserved but is not assumed globally unique across wars/maps.
+
+### 5.4 Payload replicas
+
+`payload_replicas` tracks independent copies of replay-critical external payloads.
+
+- `id uuid PK`
+- `source_payload_id uuid NOT NULL FK`
+- `replica_kind text NOT NULL` — local/offsite
+- `storage_ref text NOT NULL`
+- `state text NOT NULL` — pending/verified/failed/evicted
+- `verified_at timestamptz NULL`
+- `last_error_code text NULL`
+- `created_at timestamptz NOT NULL`
+- `updated_at timestamptz NOT NULL`
+
+Unique SHOULD prevent duplicate active replica identities for the same payload/destination.
+
+Offsite verification MUST validate the original uncompressed `content_hash`.
 
 ## 6. Objective state and change history
 
@@ -671,6 +701,29 @@ Unique: `(metric_key, version)`.
 
 These entities are specified in ANALYTICS.md.
 
+## 10.6 Transactional outbox
+
+`outbox_jobs`
+
+- `id uuid PK`
+- `job_kind text NOT NULL`
+- `aggregate_type text NULL`
+- `aggregate_id uuid NULL`
+- `dedup_key text NULL`
+- `payload jsonb NOT NULL`
+- `state text NOT NULL` — pending/running/completed/retry/dead
+- `available_at timestamptz NOT NULL`
+- `lease_owner text NULL`
+- `lease_until timestamptz NULL`
+- `attempt_count integer NOT NULL DEFAULT 0`
+- `last_error_code text NULL`
+- `created_at timestamptz NOT NULL`
+- `completed_at timestamptz NULL`
+
+Outbox rows required by a canonical state mutation MUST be inserted in the same PostgreSQL transaction as that mutation.
+
+Workers claim jobs through PostgreSQL row-lock/lease semantics. External brokers are not required for v1.
+
 ## 11. Ruleset epochs
 
 `ruleset_epochs`
@@ -720,6 +773,43 @@ Historical comparison SHOULD avoid normalizing across materially incompatible ru
 - `storage_ref text NULL`
 - `license_notice text`
 
+### 12.3 War archive revisions
+
+`war_archive_revisions`
+
+- `id uuid PK`
+- `war_id uuid NOT NULL FK`
+- `revision integer NOT NULL`
+- `state text NOT NULL` — sealing/sealed/failed/superseded
+- `collection_profile_version text NOT NULL`
+- `time_semantics_version text NOT NULL`
+- `war_time_revision integer NOT NULL`
+- `identity_resolution_version text NULL`
+- `manifest_hash char(64) NULL`
+- `manifest_payload jsonb NULL`
+- `started_at timestamptz NOT NULL`
+- `sealed_at timestamptz NULL`
+
+Unique: `(war_id, revision)`.
+
+A sealed manifest is immutable. Accepted late corrections create a new archive revision.
+
+### 12.4 Archive artifacts
+
+`archive_artifacts`
+
+- `id uuid PK`
+- `war_archive_revision_id uuid NOT NULL FK`
+- `artifact_kind text NOT NULL` — parquet/csv/manifest/other
+- `schema_version integer NULL`
+- `content_hash char(64) NOT NULL`
+- `storage_ref text NOT NULL`
+- `size_bytes bigint NOT NULL`
+- `compression text NULL`
+- `created_at timestamptz NOT NULL`
+
+Parquet artifacts are analytical projections and MUST NOT replace raw payload evidence.
+
 ## 13. Index strategy
 
 v1 starts without table partitioning unless measured evidence justifies it.
@@ -742,6 +832,9 @@ Initial B-tree indexes SHOULD cover:
 - `war_time_buckets (war_id, bucket_width, bucket_start)`
 - `region_time_buckets (war_id, region_id, bucket_width, bucket_start)`
 - `source_fetches (source_id, shard, endpoint_key, requested_at DESC)`
+- `outbox_jobs (state, available_at)`
+- `payload_replicas (state, updated_at)`
+- `war_archive_revisions (war_id, revision DESC)`
 
 BRIN MAY be added for very large append-mostly timestamp columns after measured benefit.
 
@@ -749,7 +842,7 @@ BRIN MAY be added for very large append-mostly timestamp columns after measured 
 
 Normalized facts, aggregates, provenance and analytical outputs SHOULD be retained indefinitely unless legal/source policy requires otherwise.
 
-Replay-critical unique raw source payloads are retained long-term according to INGESTION.md; physical storage tier may change without changing payload identity.
+Replay-critical unique raw source payloads are retained long-term according to DATA_LIFECYCLE.md. Small payloads may remain inline; external payloads may move between local/offsite tiers without changing content identity.
 
 ## 15. Migration rules
 
@@ -783,3 +876,8 @@ Every migration MUST be tested against a production-like PostgreSQL container an
 20. Raw `content_hash` and semantic snapshot fingerprint are distinct identities.
 21. Full raw snapshot evidence is replayable without requiring one PostgreSQL row per unchanged source item occurrence.
 22. Relational source-item/objective observations are sparse semantic evidence, not polling-frequency duplicates.
+23. Payload storage kind cannot change source content identity.
+24. External payload DB references require a durable payload object before commit.
+25. Outbox work required by a canonical mutation commits atomically with that mutation.
+26. A sealed archive manifest is immutable within its archive revision.
+27. Disaster recovery is incomplete when restored PostgreSQL references missing external replay payloads.
