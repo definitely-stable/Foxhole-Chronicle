@@ -1,12 +1,12 @@
 # Foxhole Chronicle — Data Model
 
-Status: **Authoritative working specification**
+Status: **Authoritative working specification — War API semantics verified 2026-09-19**
 
-This document defines the logical data model for Foxhole Chronicle. Where an upstream guarantee has not yet been verified against the latest official source, the rule is marked **PENDING VERIFICATION**. Implementation MUST NOT strengthen an upstream guarantee beyond what is documented.
+This document defines the logical data model for Foxhole Chronicle. Official runtime source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md).
 
 ## 1. Core principles
 
-The data model MUST preserve the full semantic chain:
+The data model MUST preserve:
 
 `source -> fetch -> observation -> normalized fact -> observed change -> derived metric -> analytical model/result -> share/export`
 
@@ -35,13 +35,29 @@ Chronicle uses internal immutable identifiers even when an upstream source provi
 - `war_number integer NULL`
 - `conquest_start_at timestamptz NULL`
 - `conquest_end_at timestamptz NULL`
+- `resistance_start_at timestamptz NULL`
+- `scheduled_conquest_end_at timestamptz NULL`
 - `winner text NULL`
+- `required_victory_towns integer NULL`
+- `short_required_victory_towns integer NULL`
 - `status text NOT NULL`
 - `ruleset_epoch_id uuid NULL`
 - `created_at timestamptz NOT NULL`
 - `updated_at timestamptz NOT NULL`
 
-Canonical identity MUST be internal `id`. Until official guarantees are re-verified, uniqueness SHOULD be enforced on `(shard, source_war_id)` when `source_war_id` is present. `war_number` is a display/human navigation value and MUST NOT be the sole relational key.
+Canonical identity is internal `id`.
+
+For official runtime wars, the natural source identity is `(shard, source_war_id)`. The official docs call `warId` unique but do not explicitly define cross-shard/global uniqueness, while `warNumber` is explicitly shard-scoped.
+
+Required partial unique index:
+
+```sql
+CREATE UNIQUE INDEX ux_wars_shard_source_war_id
+ON wars (shard, source_war_id)
+WHERE source_war_id IS NOT NULL;
+```
+
+`war_number` MUST NOT be the sole relational key.
 
 ### 2.2 Region
 
@@ -54,21 +70,32 @@ Canonical identity MUST be internal `id`. Until official guarantees are re-verif
 - `active_from timestamptz NULL`
 - `active_to timestamptz NULL`
 
+Official `regionId` is source metadata and MUST NOT replace Chronicle `regions.id`.
+
 ### 2.3 Objective
 
 Objective identity is defined in [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md).
 
 ## 3. Time semantics
 
-Chronicle MUST keep multiple clocks explicitly.
+Chronicle keeps multiple clocks explicitly.
 
 ### 3.1 Ingestion clock
 
-`captured_at`: Chronicle timestamp at which a response/observation was recorded.
+`captured_at`: Chronicle time at which a valid response/observation was recorded.
 
-### 3.2 Source clock
+### 3.2 Source clocks
 
-`source_timestamp`: timestamp supplied by the source when one exists and its semantics are known.
+`source_timestamp`: timestamp supplied by a source when its semantics are known.
+
+For official map payloads, preserve both:
+
+- `source_map_last_updated_raw bigint`
+- `source_map_last_updated_at timestamptz`
+
+Official `lastUpdated` is map-state update metadata, not an item-level event timestamp.
+
+Official war timestamps MUST also preserve their raw integer values at the source-observation layer before validated conversion.
 
 ### 3.3 War-relative clock
 
@@ -76,9 +103,13 @@ Chronicle MUST keep multiple clocks explicitly.
 - `elapsed_war_day integer`
 - `calendar_date_utc date`
 
-The canonical analytical day is **elapsed war day**, derived from the canonical war start timestamp and elapsed time. It MUST NOT be silently equated with a UTC calendar day or an upstream display field named `dayOfWar`. The relationship with upstream game-day semantics is documented in ADR [elapsed-war-day-vs-game-day.md](./adr/elapsed-war-day-vs-game-day.md).
+The canonical analytical day is elapsed war day:
 
-A daily aggregate MUST include both `elapsed_war_day` and the UTC period boundaries used to produce it.
+`floor((t - conquest_start_at) / 86400s) + 1`
+
+It MUST NOT be silently equated with UTC calendar day or upstream `dayOfWar`.
+
+See [adr/elapsed-war-day-vs-game-day.md](./adr/elapsed-war-day-vs-game-day.md).
 
 ## 4. Source and provenance model
 
@@ -88,20 +119,40 @@ A daily aggregate MUST include both `elapsed_war_day` and the UTC period boundar
 
 - `id uuid PK`
 - `key text UNIQUE NOT NULL`
-- `source_class text NOT NULL` — official, historical-community, chronicle-derived
+- `source_class text NOT NULL`
 - `authority_rank integer NOT NULL`
 - `homepage_uri text NULL`
 - `runtime_dependency boolean NOT NULL`
 - `redistribution_policy text NOT NULL`
 - `notes text NULL`
 
-### 4.2 Fetch metadata
+### 4.2 Observation batches
+
+`observation_batches`
+
+- `id uuid PK`
+- `source_id uuid FK`
+- `shard text NOT NULL`
+- `war_id uuid NULL FK`
+- `started_at timestamptz NOT NULL`
+- `completed_at timestamptz NULL`
+- `status text NOT NULL`
+- `expected_endpoint_count integer NULL`
+- `successful_endpoint_count integer NULL`
+- `coverage_ratio numeric NULL`
+
+A batch groups collection work but is **not** an atomic world snapshot.
+
+### 4.3 Fetch metadata
 
 `source_fetches`
 
 - `id uuid PK`
+- `batch_id uuid NULL FK`
 - `source_id uuid FK`
+- `shard text NULL`
 - `endpoint_key text NOT NULL`
+- `map_name text NULL`
 - `request_uri_redacted text NOT NULL`
 - `requested_at timestamptz NOT NULL`
 - `completed_at timestamptz NULL`
@@ -117,9 +168,9 @@ A daily aggregate MUST include both `elapsed_war_day` and the UTC period boundar
 - `outcome text NOT NULL`
 - `error_code text NULL`
 
-A fetch is metadata about an HTTP interaction. A `304` MUST NOT create a duplicate normalized observation.
+A fetch is one HTTP interaction. A `304` MUST NOT create a duplicate normalized observation.
 
-### 4.3 Content-addressed raw payloads
+### 4.4 Content-addressed raw payloads
 
 `source_payloads`
 
@@ -135,9 +186,9 @@ A fetch is metadata about an HTTP interaction. A `304` MUST NOT create a duplica
 
 Unique: `(source_id, content_hash)`.
 
-Storage representation (PostgreSQL JSONB vs filesystem/object storage) is selected in INGESTION.md. The logical identity remains content-addressed regardless of physical storage.
+ETag is metadata/transport validation, not payload identity.
 
-## 5. Observations and normalized facts
+## 5. Official source observations
 
 ### 5.1 War observations
 
@@ -147,14 +198,23 @@ Storage representation (PostgreSQL JSONB vs filesystem/object storage) is select
 - `war_id uuid FK`
 - `source_fetch_id uuid FK`
 - `captured_at timestamptz NOT NULL`
-- `source_timestamp timestamptz NULL`
+- `source_war_id_raw text NOT NULL`
+- `war_number_raw integer NOT NULL`
+- `winner_raw text NOT NULL`
+- `conquest_start_time_raw bigint NULL`
+- `conquest_end_time_raw bigint NULL`
+- `resistance_start_time_raw bigint NULL`
+- `scheduled_conquest_end_time_raw bigint NULL`
+- `required_victory_towns_raw integer NULL`
+- `short_required_victory_towns_raw integer NULL`
 - `war_elapsed_seconds bigint NULL`
 - `elapsed_war_day integer NULL`
-- source fields required by the official war-state payload
 - `normalizer_version text NOT NULL`
 - `quality_flags jsonb NOT NULL DEFAULT '{}'`
 
-### 5.2 Region observations
+War timestamps are converted only after millisecond-range validation.
+
+### 5.2 Region war-report observations
 
 `region_observations`
 
@@ -163,7 +223,6 @@ Storage representation (PostgreSQL JSONB vs filesystem/object storage) is select
 - `region_id uuid FK`
 - `source_fetch_id uuid FK`
 - `captured_at timestamptz NOT NULL`
-- `source_timestamp timestamptz NULL`
 - `war_elapsed_seconds bigint NULL`
 - `elapsed_war_day integer NULL`
 - `warden_casualties bigint NULL`
@@ -173,15 +232,41 @@ Storage representation (PostgreSQL JSONB vs filesystem/object storage) is select
 - `normalizer_version text NOT NULL`
 - `quality_flags jsonb NOT NULL DEFAULT '{}'`
 
-`region_enlistments` MUST be modeled as a region/map-scoped source measure. It MUST NOT be exposed as a globally unique player count by summing regions unless an official guarantee explicitly makes that valid.
+`region_enlistments` is map/region scoped. It MUST NOT be exposed as globally unique player count by summing regions.
 
-Recommended uniqueness for normalized observations is source-semantic, not local-time-only. The final unique key MUST be chosen per endpoint using the strongest verified combination of upstream identity/timestamp/content hash.
+The official README does not document casualty/enlistment monotonicity guarantees; decreases are reconciliation anomalies until classified.
+
+### 5.3 Map payload observations
+
+`map_observations`
+
+- `id uuid PK`
+- `war_id uuid FK`
+- `region_id uuid FK`
+- `source_fetch_id uuid FK`
+- `map_kind text NOT NULL` — static or dynamic_public
+- `captured_at timestamptz NOT NULL`
+- `source_region_id integer NULL`
+- `source_map_version bigint NULL`
+- `source_map_last_updated_raw bigint NULL`
+- `source_map_last_updated_at timestamptz NULL`
+- `scorched_victory_towns integer NULL`
+- `content_hash char(64) NOT NULL`
+- `normalizer_version text NOT NULL`
+- `validation_state text NOT NULL`
+- `quality_flags jsonb NOT NULL DEFAULT '{}'`
+
+Recommended uniqueness:
+
+`(war_id, region_id, map_kind, content_hash, normalizer_version)`
+
+A source map `version` is preserved but is not assumed globally unique across wars/maps.
 
 ## 6. Objective state and change history
 
 ### 6.1 Objective identities
 
-`objective_identities` and `objective_revisions` are defined in OBJECTIVE_IDENTITY.md.
+`objective_identities`, `objective_revisions`, and aliases are defined in OBJECTIVE_IDENTITY.md.
 
 ### 6.2 Objective observations
 
@@ -192,13 +277,23 @@ Recommended uniqueness for normalized observations is source-semantic, not local
 - `objective_id uuid FK`
 - `objective_revision_id uuid FK`
 - `source_fetch_id uuid FK`
+- `map_observation_id uuid FK`
 - `observed_at timestamptz NOT NULL`
-- `team_state text NULL`
-- `icon_type integer/text NULL`
-- `flags bigint NULL`
+- `team_state_raw text NULL`
+- `team_state_normalized text NULL`
+- `icon_type_raw integer NOT NULL`
+- `flags_raw bigint NOT NULL`
+- `known_flags jsonb NOT NULL`
+- `x numeric NOT NULL`
+- `y numeric NOT NULL`
 - `raw_state_hash char(64) NOT NULL`
 - `identity_algorithm_version text NOT NULL`
+- `match_method text NOT NULL`
+- `match_score numeric NULL`
+- `ambiguity_margin numeric NULL`
 - `quality_flags jsonb NOT NULL DEFAULT '{}'`
+
+Unknown icon codes and flag bits MUST survive losslessly.
 
 ### 6.3 Observed changes
 
@@ -214,19 +309,23 @@ Recommended uniqueness for normalized observations is source-semantic, not local
 - `detected_at timestamptz NOT NULL`
 - `previous_state jsonb NULL`
 - `current_state jsonb NULL`
+- `previous_map_observation_id uuid NULL FK`
+- `current_map_observation_id uuid NULL FK`
 - `detector_version text NOT NULL`
 - `coverage_ratio numeric NULL`
 - `confidence_class text NOT NULL`
 - `quality_flags jsonb NOT NULL DEFAULT '{}'`
 
-Chronicle MUST NOT assign an exact in-game event timestamp when the source only proves that a change occurred in `(previous_observed_at, current_observed_at]`.
+Chronicle MUST NOT assign an exact in-game event timestamp when the source only proves a change in `(previous_observed_at, current_observed_at]`.
+
+Quarantined map observations MUST NOT be used as normal event bounds.
 
 ## 7. Coverage
 
 `coverage_segments`
 
 - `id uuid PK`
-- `scope_type text NOT NULL` — war, region, objective, metric
+- `scope_type text NOT NULL`
 - `scope_id uuid NOT NULL`
 - `source_id uuid NULL`
 - `metric_key text NULL`
@@ -424,7 +523,7 @@ Historical comparison SHOULD avoid normalizing across materially incompatible ru
 - `share_kind text`
 - `canonical_route text`
 - `canonical_state jsonb`
-- `snapshot_mode text` — live or immutable
+- `snapshot_mode text`
 - `algorithm_versions jsonb`
 - `input_fingerprint char(64) NULL`
 - `created_at timestamptz`
@@ -448,48 +547,47 @@ Historical comparison SHOULD avoid normalizing across materially incompatible ru
 
 ## 13. Index strategy
 
-v1 MUST start without table partitioning unless measured evidence justifies it.
+v1 starts without table partitioning unless measured evidence justifies it.
 
 Initial B-tree indexes SHOULD cover:
 
 - `war_observations (war_id, captured_at)`
 - `region_observations (war_id, region_id, captured_at)`
+- `map_observations (war_id, region_id, map_kind, captured_at)`
 - `objective_observations (war_id, objective_id, observed_at)`
 - `observed_changes (war_id, current_observed_at)`
 - `observed_changes (objective_id, current_observed_at)`
 - `war_time_buckets (war_id, bucket_width, bucket_start)`
 - `region_time_buckets (war_id, region_id, bucket_width, bucket_start)`
+- `source_fetches (source_id, shard, endpoint_key, requested_at DESC)`
 
 BRIN MAY be added for very large append-mostly timestamp columns after measured benefit.
-
-A partitioning ADR MUST be created only when at least one of these is demonstrated:
-
-- retention operations cause unacceptable locking/write amplification;
-- index/table size materially degrades target queries;
-- vacuum/maintenance becomes a measured bottleneck;
-- row counts and query plans show partition pruning will materially improve cost.
-
-No arbitrary row threshold is authoritative without benchmark evidence.
 
 ## 14. Retention
 
 Normalized facts, aggregates, provenance and analytical outputs SHOULD be retained indefinitely unless legal/source policy requires otherwise.
 
-Raw source payload retention is source-specific and defined in INGESTION.md and DATA_LICENSING.md. High-frequency raw payloads MUST NOT be assumed to be permanent.
+Raw source payload retention is source-specific and defined in INGESTION.md and DATA_LICENSING.md.
 
 ## 15. Migration rules
 
 EF Core migrations SHOULD own application relational schema.
 
-Hand-written SQL migrations MAY be used for indexes, generated columns, specialized constraints and performance structures that are clearer outside EF abstractions.
+Hand-written SQL migrations MAY be used for indexes, generated columns, specialized constraints and performance structures clearer outside EF abstractions.
 
-Every migration MUST be tested against a production-like PostgreSQL container and MUST have a documented rollback/forward-fix strategy.
+Every migration MUST be tested against a production-like PostgreSQL container and have a documented rollback/forward-fix strategy.
 
 ## 16. Non-negotiable invariants
 
 1. No exact event timestamp may be invented from polling.
-2. No global unique-player count may be produced from region-scoped enlistment values without verified source semantics.
-3. No derived value may exist without an algorithm/version identity.
-4. No analytical result may hide inadequate source coverage.
-5. No historical import may erase its original source/provenance.
-6. No share/export may silently change semantics after an algorithm version change.
+2. Map `lastUpdated` is not an item event timestamp.
+3. No global unique-player count may be produced from region-scoped enlistment values by summation.
+4. `warNumber` is not a canonical war key.
+5. Official facts are always shard-scoped.
+6. No objective identity may depend on upstream array order.
+7. Unknown icon/enum/flag values are preserved losslessly.
+8. Quarantined source observations do not become normal current state.
+9. No derived value exists without algorithm/version identity.
+10. No analytical result hides inadequate source coverage.
+11. No historical import erases original provenance.
+12. No share/export silently changes semantics after an algorithm version change.
