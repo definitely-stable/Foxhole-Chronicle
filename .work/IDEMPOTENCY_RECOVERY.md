@@ -61,11 +61,20 @@ requested_at, completed_at and captured_at MUST NOT define logical job identity.
 
 ### 2.2 Reconciliation operation ID
 
-Before starting the reconciliation transaction the worker derives or persists one operation ID and reuses it for every retry of that same response/evidence.
+Before starting canonical reconciliation the worker derives a deterministic **operation key** for the intended interpretation of the evidence and reuses that key for every retry/restart of the same logical reconciliation.
 
-The operation ID MUST be protected by a unique constraint. A retry that finds the operation already committed returns the committed result rather than applying the mutation again.
+The ledger uses:
 
-UUIDv7 is the default physical identifier for jobs/attempts/fetches because it is client-generated and index-friendly. Hash-derived IDs MAY be used only for truly deterministic identities. Business uniqueness remains enforced by explicit unique constraints, not by UUID shape.
+- `operation_id` — physical UUIDv7 row identity;
+- `operation_key` — deterministic business/idempotency identity, UNIQUE;
+- `operation_kind` — for example `canonical_ingest` or `reprocess`;
+- `input_fingerprint` — hash of the interpretation inputs/versions relevant to that operation.
+
+For ordinary canonical ingestion the operation key MUST include at least the stable fetch identity plus the parser/normalizer/semantic interpretation versions that define the canonical mutation. Reprocessing uses a distinct operation kind/key including the reprocessing run/version scope.
+
+A retry/restart derives the same `operation_key`. If it already exists as committed, the worker returns/reloads that result instead of applying the mutation again.
+
+UUIDv7 remains the default physical identifier for jobs/attempts/fetches/operation rows because it is client-generated and index-friendly. Business uniqueness is enforced by explicit deterministic keys/constraints, not by UUID shape.
 
 ## 3. Non-negotiable invariants
 
@@ -162,22 +171,39 @@ Short READ COMMITTED transaction:
 
 The claim transaction ends before HTTP.
 
-### Phase B — HTTP and raw preparation
+### Phase B — endpoint-ownership transaction
+
+Before HTTP execution, the attempt MUST acquire the semantic endpoint lease/fence.
+
+Short READ COMMITTED transaction:
+
+1. lock the matching `endpoint_poll_state` row FOR UPDATE;
+2. verify that the previous endpoint lease is absent, expired or otherwise releasable;
+3. increment `fence_token`;
+4. set `lease_owner_attempt_id` to the current attempt and set `lease_until`;
+5. copy the acquired endpoint fence token into the durable attempt record;
+6. commit.
+
+The endpoint lease/fence is independent from `ingestion_jobs.lease_generation`.
+
+If endpoint ownership cannot be acquired, the attempt MUST NOT issue the HTTP request.
+
+### Phase C — HTTP and raw preparation
 
 Outside PostgreSQL transaction:
 
-1. issue conditional GET with endpoint ETag state;
+1. issue one conditional GET using the endpoint ETag/cache state captured under the current endpoint ownership;
 2. enforce total timeout, attempt timeout and response-size limit;
-3. on 304, retain headers/status and proceed to reconciliation;
+3. on 304, retain headers/status and proceed to raw capture;
 4. on 200, read exact response bytes;
 5. compute SHA-256 over original bytes;
 6. compute parser/schema/semantic fingerprints as applicable;
 7. if external storage is selected, publish the compressed CAS object durably;
-8. if inline storage is selected, keep exact bytes for the reconciliation transaction.
+8. if inline storage is selected, keep exact bytes for the raw-capture transaction.
 
-The lease duration MUST exceed configured HTTP total timeout plus reconciliation margin. If the lease is renewed, renewal MUST require the same lease_generation.
+The logical-job lease and endpoint lease durations MUST exceed configured HTTP total timeout plus raw-capture/reconciliation margin. Renewal of the logical-job lease requires the same `lease_generation`; renewal of the endpoint lease requires the same owner attempt and `fence_token`.
 
-### Phase C — raw-capture transaction
+### Phase D — raw-capture transaction
 
 After the HTTP exchange is complete and any external CAS object is durably published, Chronicle crosses the raw-durable boundary in a short PostgreSQL transaction.
 
@@ -194,7 +220,7 @@ After this commit, a Worker crash MUST NOT erase the only Chronicle copy of a su
 
 The raw-capture transaction MUST NOT mutate endpoint current state, emit observed changes or enqueue canonical-state downstream work.
 
-### Phase D — canonical reconciliation transaction
+### Phase E — canonical reconciliation transaction
 
 Default isolation: READ COMMITTED.
 
@@ -213,7 +239,7 @@ The transaction MUST be short and MUST:
 11. persist coverage validation evidence;
 12. insert observed changes/state intervals as applicable;
 13. insert all required outbox jobs with deterministic dedup keys;
-14. record `reconciliation_operation_id UNIQUE` with both job generation and endpoint fence token;
+14. insert/reconcile the deterministic reconciliation `operation_key UNIQUE` and its physical `operation_id`, recording both job generation and endpoint fence token;
 15. mark attempt/job final outcome;
 16. release/advance endpoint scheduling state as required;
 17. commit.
@@ -331,11 +357,11 @@ A network failure while COMMIT is in progress can leave the client unable to kno
 
 Chronicle protocol:
 
-1. every raw-capture transaction uses stable client-generated fetch/payload identities, and every canonical reconciliation transaction has a client-known `reconciliation_operation_id`;
+1. every raw-capture transaction uses stable client-generated fetch/payload identities, and every canonical reconciliation transaction has a deterministic client-known `operation_key` plus physical `operation_id`;
 2. before COMMIT, the worker MAY read pg_current_xact_id() and keep xid8 in attempt telemetry;
 3. if CommitAsync throws because the connection is lost, classify commit_outcome_unknown;
 4. reconnect;
-5. first query the committed operation by reconciliation_operation_id;
+5. first query the committed operation by deterministic operation_key (or the already-known physical operation_id when available);
 6. if present, treat the operation as committed and load its result;
 7. if absent and the xid8 is available, pg_xact_status(xid8) MAY be used as a diagnostic/fast-path while status is retained;
 8. if status is committed, re-read by operation ID and alert on invariant violation if missing;
@@ -345,7 +371,7 @@ Chronicle protocol:
 
 The process MUST NOT assume that a CommitAsync exception means rollback.
 
-Unknown COMMIT on the raw-capture transaction is reconciled first by the stable `source_fetch.id` and payload uniqueness. Unknown COMMIT on canonical reconciliation is reconciled by `reconciliation_operation_id`. Neither path creates a new logical identity merely because the client lost the connection.
+Unknown COMMIT on the raw-capture transaction is reconciled first by the stable `source_fetch.id` and payload uniqueness. Unknown COMMIT on canonical reconciliation is reconciled by the deterministic `operation_key`/existing operation ledger row. Neither path creates a new logical identity merely because the client lost the connection.
 
 EF Core execution strategies MUST NOT blindly rerun a transaction delegate that can create a second logical operation. Client-generated keys and deterministic operation IDs are mandatory for retryable write delegates.
 
