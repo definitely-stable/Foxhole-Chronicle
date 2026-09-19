@@ -32,7 +32,7 @@ The implementation bootstrap pins the following compatible versions:
 - npm 11.19.1;
 - Next.js 16.3.5;
 - React / React DOM 19.3.0;
-- TypeScript 6.0.3;
+- TypeScript 5.9.3;
 - next-intl 4.14.2;
 - @formatjs/intl-localematcher 0.9.0;
 - nuqs 2.10.1;
@@ -43,7 +43,7 @@ The implementation bootstrap pins the following compatible versions:
 - Tailwind CSS / @tailwindcss/postcss 4.3.3;
 - @vercel/otel 2.1.3.
 
-TypeScript 7 is deliberately NOT used in the September 2026 bootstrap: its Go-based `typescript` package no longer exposes the JavaScript compiler API expected by current Next.js 16 tooling. Revisit only after Next.js documents support for the TypeScript 7 package.
+TypeScript 5.9.3 is deliberately pinned for the September 2026 bootstrap. Current `openapi-typescript@7.13.0` declares a `typescript@^5.x` peer contract, while TypeScript 7's Go-based package also changes the compiler-API model used by existing tooling. Do not bypass this with `--force` or `legacy-peer-deps`; revisit the compiler line when the full Next.js + OpenAPI toolchain supports it.
 
 ### 2.1 Adopt for v1
 
@@ -59,7 +59,7 @@ Runtime:
 Build/development:
 
 - openapi-typescript 7.x — generate TypeScript types from OpenAPI 3.1;
-- TypeScript 6.x compiler with noUncheckedIndexedAccess enabled until Next.js supports the TypeScript 7 package/compiler API model.
+- TypeScript 5.9.x compiler with noUncheckedIndexedAccess enabled while the approved OpenAPI generator requires TypeScript ^5.x.
 
 Testing:
 
