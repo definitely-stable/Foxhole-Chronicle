@@ -15,24 +15,28 @@ This file records the review findings that the final specifications must validat
 9. Next.js and ASP.NET Core should not independently invent competing caching layers or duplicated API contracts.
 10. Single-node operations require realistic SLOs, offsite backups and tested restores.
 
-## Items requiring explicit verification
+## Source-semantics verification status
 
-### War API identity and timing
+### War API identity and timing — resolved for backend baseline
 
-Verify from the official API/documentation:
+The 2026-09-19 source-semantics pass is materialized in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md).
 
-- meaning and stability of `warId`
-- relationship between war ID and displayed war number
-- shard semantics
-- availability of upstream timestamps
-- whether map items expose any stable objective identifier
-- documented cache headers and ETag behavior
+Resolved baseline:
 
-Until verified, no schema should assume guarantees that the source does not state.
+- canonical Chronicle war identity remains internal UUID;
+- official runtime identity is shard + `warId`;
+- `warNumber` is shard-scoped display/navigation data, not a PK;
+- official map items expose no documented stable objective ID;
+- map `lastUpdated` is map-state update metadata, not an item event timestamp;
+- ETag/`If-None-Match`/304 are documented and required for ingestion efficiency;
+- raw `dayOfWar` is not Chronicle's analytical 24-hour day;
+- map-scoped enlistments must not be summed into a global unique-player count.
+
+Remaining unknowns are explicitly listed in WAR_API_SEMANTICS.md and MUST stay conservative.
 
 ### Objective identity
 
-The review proposes an internal `objective_key` derived from static map data, canonical coordinates, objective family and an identity algorithm version. This is directionally sound but MUST be tested against real payload evolution before being treated as collision-free.
+Chronicle-owned objective identity is now an accepted requirement because the official map-item schema has no stable objective ID. Coordinate tolerance and cross-war matching still require calibration against a real payload corpus before being treated as collision-free.
 
 ### Partitioning
 
@@ -94,7 +98,6 @@ Phase 2:
 Not v1:
 
 - Turning Points
-- Population Lab
 - accounts
 - Discord
 - player profiles
