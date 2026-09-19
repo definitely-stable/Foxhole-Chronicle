@@ -80,6 +80,8 @@ Contract tests verify:
 - enum/token stability;
 - locale-neutral responses;
 - ETag/Cache-Control behavior where specified;
+- Replay manifest/state/change schemas;
+- Replay state classes and uncertainty fields;
 - no accidental breaking change in public v1 schema.
 
 Build-time OpenAPI output feeds frontend type generation.
@@ -125,15 +127,22 @@ Use Playwright.
 Core flows include:
 
 - locale resolution and switching;
-- Overview;
-- current war navigation;
-- Archive;
-- Compare;
-- timeline URL state;
+- Current War;
+- navigation from Current War into the canonical war workspace;
+- War Timeline inspection;
+- Timeline at-cursor URL restoration;
+- Archive / war switching;
+- War Replay seek;
+- Timeline -> Replay cursor synchronization;
+- Replay -> Timeline cursor synchronization;
+- Replay play/pause/step/speed controls;
 - reload/back/forward restoration;
 - shareable query state;
+- uncertainty/no-coverage presentation;
 - error/degraded data presentation;
 - responsive layouts.
+
+Compare/Records browser flows are P1 and MUST NOT displace P0 core-flow coverage.
 
 Run representative smoke tests across all launch locales:
 
@@ -142,6 +151,27 @@ Run representative smoke tests across all launch locales:
 - zh-Hans;
 - fr;
 - pt-BR.
+
+## 8.1 Replay correctness suite
+
+Replay requires dedicated deterministic fixtures.
+
+Minimum scenarios:
+
+1. A -> B -> A preserves all three temporal states.
+2. Same payload/state bytes at the first and third observation do not collapse temporal history.
+3. Selected instant exactly at previous observation returns the previous observed state.
+4. Selected instant exactly at current observation returns the current observed state.
+5. Selected instant strictly inside a different-state observation window returns transition_uncertain rather than an interpolated owner.
+6. Missing/degraded evidence returns no_coverage when required by coverage policy.
+7. Direct replay-state query matches baseline + accepted change-stream reconstruction.
+8. Overlapping uncertainty windows do not gain fabricated exact ordering.
+9. Identity remap/revision invalidates or versions affected replay output.
+10. Conquest-start correction changes displayed elapsed Day/time but an absolute at cursor still points to the same evidence instant.
+
+Performance test:
+
+- playback animation MUST NOT generate one full-state API request per rendered frame.
 
 ## 9. Accessibility
 
@@ -153,9 +183,13 @@ Manual review remains required for:
 
 - keyboard flow;
 - focus behavior;
+- Timeline keyboard inspection;
+- Replay keyboard controls;
 - chart comprehension;
+- replay uncertainty comprehension;
 - non-color encoding;
 - screen-reader wording;
+- reduced-motion playback behavior;
 - CJK/translated UI overflow.
 
 ## 10. Visual/layout regression
@@ -163,8 +197,10 @@ Manual review remains required for:
 Targeted Playwright screenshots MAY be used for high-value stable surfaces, especially:
 
 - five-locale header/navigation;
-- dense tables;
-- charts;
+- Current War;
+- War Timeline with inspection marker;
+- War Replay confirmed/uncertain/no-coverage states;
+- wide-screen archive rail;
 - narrow responsive breakpoints;
 - long French/Russian labels;
 - Simplified Chinese typography.
