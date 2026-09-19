@@ -117,6 +117,8 @@ External CAS SHOULD use Zstandard.
 
 A PostgreSQL row MUST NOT commit a reference to an external payload that is not durably available.
 
+Chronicle distinguishes raw durability from canonical acceptance: preserving a received response durably is allowed before deciding whether it is current, valid, anomalous or stale-fenced.
+
 Safe order:
 
 1. receive source bytes;
@@ -125,9 +127,9 @@ Safe order:
 4. durably flush/upload object;
 5. atomically/conditionally publish the final content-addressed object;
 6. verify stored identity/size according to the storage adapter;
-7. only then begin the PostgreSQL reconciliation transaction;
-8. store payload metadata/fetch/facts/outbox jobs;
-9. commit.
+7. only then begin a short PostgreSQL **raw-capture transaction**;
+8. store stable fetch metadata plus payload metadata/reference and commit;
+9. only after that raw-durable COMMIT, run a separate short canonical reconciliation transaction for normalized observations/current state/changes/outbox.
 
 For local POSIX/Linux storage, durable publication means at minimum:
 
@@ -157,9 +159,11 @@ Unreferenced CAS objects MAY be garbage-collected only after:
 
 ## 5. Inline payload protocol
 
-Inline payload bytes and fetch metadata can commit in one PostgreSQL transaction.
+Inline payload bytes and fetch metadata commit together in the short raw-capture transaction.
 
 The bytes MUST be the exact original response body.
+
+The raw-capture COMMIT is the raw-durable boundary for inline storage. Canonical normalization/reconciliation is a later transaction. A Worker crash after receiving a response but before raw-capture COMMIT may lose that response; after raw-capture COMMIT it MUST be recoverable without depending on a refetch.
 
 Inline payloads MUST retain the same content-hash semantics as external payloads.
 

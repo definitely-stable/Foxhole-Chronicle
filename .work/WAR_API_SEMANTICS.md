@@ -335,7 +335,7 @@ No numeric request-rate limit is documented in the official README.
 - on 200 with unchanged SHA-256, record the fetch but skip normalization/fact mutation;
 - on 200 with changed content, persist payload then normalize/reconcile.
 
-Because Chronicle is historical analytics rather than a tactical live map, initial target polling SHOULD be approximately 60 seconds for dynamic map and war-report data, 60 seconds for war state, and transition/new-map driven for static data, while always respecting stricter upstream cache headers. These are Chronicle product targets, not upstream guarantees.
+Chronicle collection cadence is **not** owned by this source-semantics document. This section records only upstream capabilities/cache requirements. Chronicle product polling policy is defined by `INGESTION.md` and the accepted collection-cadence ADR.
 
 ## 11. Event-time epistemics
 

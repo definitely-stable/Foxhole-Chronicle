@@ -166,7 +166,8 @@ Owns:
 - normalization;
 - reconciliation;
 - transactional outbox processing;
-- durable job/attempt leases and generation fencing;
+- durable job/attempt leases;
+- endpoint scheduling state and endpoint-level fencing;
 - unknown-COMMIT reconciliation;
 - observed-change detection;
 - aggregates;
@@ -201,7 +202,7 @@ PostgreSQL metadata and the raw payload store are jointly required for complete 
 
 The canonical chain is:
 
-`source -> fetch -> observation -> normalized fact -> observed change -> derived metric -> analytical model/result -> share/export`
+`source -> fetch -> raw durable evidence -> observation -> normalized fact -> observed change -> derived metric -> analytical model/result -> share/export`
 
 This separation is mandatory.
 
@@ -321,7 +322,7 @@ Chronicle MUST prioritize data durability and graceful stale-data behavior over 
 
 The public site must continue serving the last known-good dataset if ingestion fails.
 
-Worker correctness uses at-least-once execution plus deterministic idempotency, not an exactly-once claim. HTTP/CAS work remains outside PostgreSQL transactions. Short reconciliation transactions use explicit endpoint cursor locking and lease-generation fencing. A connection loss around COMMIT is reconciled by stable operation identity before retry.
+Worker correctness uses at-least-once execution plus deterministic idempotency, not an exactly-once claim. HTTP/CAS work remains outside PostgreSQL transactions. A short raw-capture transaction makes received source evidence durable before canonical processing. Canonical reconciliation then locks endpoint scheduling/fence state and accepted-state cursor in a stable order, requiring both current job ownership and the current endpoint fence token. A connection loss around COMMIT is reconciled by stable fetch/operation identity before retry.
 
 Operational SLOs SHOULD include:
 

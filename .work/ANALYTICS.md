@@ -97,7 +97,7 @@ Results include:
 
 Winner/result MUST NOT be an input for active-war similarity and MUST NOT be used to suggest likely outcome.
 
-## 4. War Phases — P0
+## 4. War Phases — P1 / corpus-calibrated
 
 Purpose: deterministic segmentation of the observed war timeline.
 
@@ -143,7 +143,9 @@ Marketing labels such as "stalemate", "breakthrough", "endgame" MAY be displayed
 6. Merge transient segments below duration threshold.
 7. Persist segment inputs/evidence and model version.
 
-Exact thresholds remain **PENDING CALIBRATION** against golden historical datasets.
+Exact thresholds remain **PENDING CALIBRATION** against a representative Chronicle-native/golden corpus.
+
+`phase-model@1` MUST NOT be treated as launch-blocking or authoritative before that calibration corpus exists. Any earlier exploratory implementation must use an explicitly experimental/provisional model version and must not silently become the historical baseline.
 
 ## 5. Swing Analysis
 
