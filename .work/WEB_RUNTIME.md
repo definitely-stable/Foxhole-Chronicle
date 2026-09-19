@@ -23,6 +23,8 @@ Client Components are used only for real client interactivity such as:
 
 Fetching canonical Chronicle data SHOULD happen server-side by default.
 
+Current War and the canonical selected-war workspace SHOULD reuse the same Timeline rendering/view-model path. Current War supplies the active shard/war context and defaults the inspection cursor to the latest accepted state; it is not a separate frontend data architecture.
+
 ## 2. Cache Components
 
 Chronicle SHOULD enable Next.js 16 Cache Components.
