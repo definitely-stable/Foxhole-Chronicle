@@ -50,13 +50,24 @@ Current War, War Timeline and War Replay share one canonical war-history model.
 
 ## Build and test
 
-Current `main` is specification-only.
+Run from repository root:
 
-- Build: not available yet.
-- Test: not available yet.
+- Restore/install: `npm run bootstrap`
+- Build all: `npm run build`
+- Test unit/integration/contract + web unit: `npm test`
+- Build + test verification: `npm run verify`
+- Browser E2E: `npm --prefix apps/web run test:e2e`
 - Documentation validation: `git diff --check`
 
-Do not invent commands. The first implementation-bootstrap PR MUST replace the unavailable entries with exact repository-root build/test commands.
+Local PostgreSQL: `docker compose up -d postgres`.
+
+Development processes:
+
+- API: `dotnet run --project src/Chronicle.Api`
+- Worker: `dotnet run --project src/Chronicle.Worker`
+- Web: `npm --prefix apps/web run dev`
+
+Do not invent alternate commands when these cover the task.
 
 ## Branches and PRs
 
