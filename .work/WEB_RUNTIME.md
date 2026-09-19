@@ -107,8 +107,8 @@ The frontend API contract is generated from ASP.NET Core OpenAPI 3.1.
 Pipeline:
 
 ~~~text
-Chronicle.Api
-  -> build-time public OpenAPI document
+Chronicle.Api /api/app
+  -> build-time application OpenAPI document
   -> openapi-typescript
   -> generated paths/components types
   -> openapi-fetch
@@ -173,8 +173,10 @@ Timeline inspection, Replay scrubbing and Day navigation MUST update the same se
 Replay client state is split into:
 
 - manifest/static replay metadata;
-- baseline state at a seek point;
+- baseline state + replayEvidenceClass at a seek point;
 - an ordered nearby/range change buffer;
+- active per-objective uncertainty windows;
+- coverage/freshness evidence needed to derive supported_continuity / last_known / no_coverage;
 - ephemeral playback clock/UI state.
 
 Preferred algorithm:
@@ -187,11 +189,14 @@ seek
 
 play
   -> advance local clock
-  -> apply buffered accepted changes
+  -> enter/leave uncertainty windows as the cursor moves
+  -> apply newly observed state only at reconstructionBoundaryAt
   -> prefetch another change window when needed
 ~~~
 
 A high-frame-rate animation loop MUST NOT cause high-frame-rate API snapshot requests.
+
+Local playback MUST reproduce both the state value and the replayEvidenceClass that a direct state-at-time query would return. Applying a new state at currentObservedAt does not make the earlier open uncertainty interval certain.
 
 A future wide-screen split mode may render Timeline and Replay concurrently, but both surfaces MUST use the same cursor and transport contracts.
 
