@@ -21,6 +21,7 @@ Research/review files are evidence and critique, not authoritative architecture 
 .work/
 ├── ARCHITECTURE.md
 ├── WAR_API_SEMANTICS.md
+├── TIME_SEMANTICS.md
 ├── DATA_MODEL.md
 ├── INGESTION.md
 ├── HISTORICAL_DATA.md
@@ -50,7 +51,8 @@ Supporting research material:
 ├── RESEARCH_BRIEF.md
 ├── REVIEW_SYNTHESIS.md
 ├── research/
-│   └── OBJECTIVE_IDENTITY_RESEARCH_2026-09-19.md
+│   ├── OBJECTIVE_IDENTITY_RESEARCH_2026-09-19.md
+│   └── TIME_SEMANTICS_RESEARCH_2026-09-19.md
 └── reviews/
     ├── architecture-review-agent-2.md
     └── architecture-ux-analysis-2026.md
@@ -62,6 +64,7 @@ The following documents are the most important **before writing the main backend
 
 ```text
 WAR_API_SEMANTICS.md
+TIME_SEMANTICS.md
 DATA_MODEL.md
 INGESTION.md
 OBJECTIVE_IDENTITY.md
@@ -142,6 +145,9 @@ Chronicle MUST preserve this semantic chain:
 Chronicle MUST NOT:
 
 - invent exact event times from polling;
+- equate raw `dayOfWar`, UTC calendar day and Chronicle elapsed war day;
+- create an empty following day when conquest ends exactly on a 24-hour elapsed boundary;
+- allocate boundary-crossing poll uncertainty to a fake exact day;
 - hide historical resolution gaps;
 - silently redefine metrics;
 - merge uncertain objective identities by guess;
@@ -156,5 +162,7 @@ Chronicle MUST NOT:
 The War API source-semantics gate has been materialized in `WAR_API_SEMANTICS.md`.
 
 The Objective Identity deep-research pass is integrated into `OBJECTIVE_IDENTITY.md`, `DATA_MODEL.md`, `INGESTION.md`, `METRICS.md`, `ANALYTICS.md`, `PUBLIC_API.md`, and `adr/objective-identity.md`. Production matcher thresholds remain intentionally uncommitted until calibration against a labeled real-payload corpus.
+
+The Time Semantics deep-research pass is integrated into `TIME_SEMANTICS.md`, `WAR_API_SEMANTICS.md`, `DATA_MODEL.md`, `INGESTION.md`, `HISTORICAL_DATA.md`, `METRICS.md`, `ANALYTICS.md`, `PUBLIC_API.md`, `ARCHITECTURE.md`, and `adr/elapsed-war-day-vs-game-day.md`. Canonical time semantics version is `elapsed-war-clock@1`.
 
 Items explicitly marked UNKNOWN or unresolved remain conservative implementation constraints, not invitations to guess.
