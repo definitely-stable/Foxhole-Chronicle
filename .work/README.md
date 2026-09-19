@@ -49,6 +49,8 @@ Supporting research material:
 .work/
 ├── RESEARCH_BRIEF.md
 ├── REVIEW_SYNTHESIS.md
+├── research/
+│   └── OBJECTIVE_IDENTITY_RESEARCH_2026-09-19.md
 └── reviews/
     ├── architecture-review-agent-2.md
     └── architecture-ux-analysis-2026.md
@@ -151,4 +153,8 @@ Chronicle MUST NOT:
 
 ## Current status
 
-The War API source-semantics gate has been materialized in `WAR_API_SEMANTICS.md`. Items explicitly marked UNKNOWN or unresolved there remain conservative implementation constraints, not invitations to guess.
+The War API source-semantics gate has been materialized in `WAR_API_SEMANTICS.md`.
+
+The Objective Identity deep-research pass is integrated into `OBJECTIVE_IDENTITY.md`, `DATA_MODEL.md`, `INGESTION.md`, `METRICS.md`, `ANALYTICS.md`, `PUBLIC_API.md`, and `adr/objective-identity.md`. Production matcher thresholds remain intentionally uncommitted until calibration against a labeled real-payload corpus.
+
+Items explicitly marked UNKNOWN or unresolved remain conservative implementation constraints, not invitations to guess.
