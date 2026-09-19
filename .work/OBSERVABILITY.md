@@ -14,7 +14,8 @@ Observability must answer:
 - where did an ingestion/reconciliation operation fail;
 - which PostgreSQL queries consume time/I/O;
 - whether archive/backup/raw replication is healthy;
-- whether a user-visible regression is web, API, database or upstream-source related.
+- whether a user-visible regression is web, API, database or upstream-source related;
+- whether Timeline/Replay queries and playback-window loading meet interactive latency expectations.
 
 Chronicle uses logs, metrics and distributed traces together.
 
@@ -75,6 +76,9 @@ EF Core query tags MAY add constant logical operation names such as:
 ~~~text
 Chronicle.War.Current
 Chronicle.War.Timeline
+Chronicle.War.Replay.Manifest
+Chronicle.War.Replay.State
+Chronicle.War.Replay.Changes
 Chronicle.Compare.Wars
 Chronicle.Records.Query
 Chronicle.Worker.Reconcile
