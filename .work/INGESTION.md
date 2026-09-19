@@ -1,10 +1,10 @@
 # Foxhole Chronicle — Ingestion Architecture
 
-Status: **Authoritative working specification — War API, Time Semantics, collection cadence and storage shape integrated 2026-09-19**
+Status: **Authoritative working specification — War API, Time Semantics, collection cadence, storage shape and crash-recovery protocol integrated 2026-09-19**
 
 This document defines current/future data collection, historical imports, retries, replay, reconciliation and raw-data retention. Durable archive/backup/recovery rules are defined in [DATA_LIFECYCLE.md](./DATA_LIFECYCLE.md).
 
-Official source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Canonical analytical clock rules are defined in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md). The worker MUST NOT invent stronger guarantees.
+Official source semantics are defined in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Canonical analytical clock rules are defined in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md). Durable idempotency/transaction/crash semantics are defined in [IDEMPOTENCY_RECOVERY.md](./IDEMPOTENCY_RECOVERY.md). The worker MUST NOT invent stronger guarantees.
 
 ## 1. Source policy
 
@@ -250,67 +250,67 @@ Each fetch keeps its own request/completion/source timestamps.
 
 Analytics combining war reports and dynamic maps MUST apply freshness/coverage tolerances rather than assume simultaneity.
 
-## 9. Ingestion job state machine
+## 9. Durable job / attempt state machine
 
-`ingestion_jobs` states:
+The normative worker state machine is defined in [IDEMPOTENCY_RECOVERY.md](./IDEMPOTENCY_RECOVERY.md).
 
-- `scheduled`
-- `fetching`
-- `fetched_unchanged`
-- `fetched_changed`
-- `normalizing`
-- `validating`
-- `persisting`
-- `deriving`
-- `completed`
-- `retry_wait`
-- `blocked_circuit_open`
-- `quarantined_schema_drift`
-- `quarantined_source_anomaly`
-- `failed_terminal`
+Chronicle MUST distinguish:
 
-Transitions MUST be monotonic for one attempt. Retries create a new attempt linked to the same logical job.
+- one logical collection job from its execution attempts;
+- one ingestion attempt from one HTTP fetch/exchange;
+- fetch evidence from canonical reconciliation;
+- external raw durability from PostgreSQL commit;
+- job ownership from canonical-state fencing.
 
-Each attempt records:
+Logical job states are intentionally small:
 
-- attempt number;
-- started/completed timestamps;
-- failure class;
-- retryability;
-- next retry time;
-- fetch ID;
-- parser/normalizer version;
-- worker build/commit identifier.
+- `scheduled`;
+- `leased`;
+- `retry_wait`;
+- `completed`;
+- `quarantined`;
+- `failed_terminal`.
 
-## 10. Retry policy
+Claiming a job atomically increments `lease_generation`. That generation is a fencing token. A worker whose lease generation is no longer current may retain immutable fetch/payload evidence but MUST NOT mutate canonical current state.
 
-Retry only errors classified as transient.
+Retries create a new `ingestion_attempt` linked to the same logical job. The logical job/reconciliation identity remains stable across retries.
 
-Baseline:
+## 10. Transaction boundaries and retry policy
 
-- exponential backoff;
-- full jitter;
-- bounded maximum delay;
-- retry budget per endpoint;
-- circuit breaker after repeated source-level failures.
+HTTP fetches, compression, external CAS writes/uploads and heavy derivation MUST run outside PostgreSQL transactions.
 
-Do not retry immediately:
+The normal ingestion path uses:
 
-- deterministic parser/schema validation failures without a new build/config;
-- known permanent 4xx responses;
-- licensing/policy blocks.
+1. a short **claim transaction** that leases the logical job and creates the attempt;
+2. HTTP/raw preparation outside PostgreSQL;
+3. a short **reconciliation transaction** that locks the endpoint cursor, verifies the lease generation, persists fetch/payload links and accepted facts, mutates canonical state, persists coverage evidence and inserts required outbox work atomically.
 
-For a map-specific 404, refresh the active map list before deciding whether the map is invalid/retired.
+Default isolation is `READ COMMITTED` with explicit row locking/unique constraints. `SERIALIZABLE` is reserved for rare cross-row invariants that justify it.
 
-A circuit breaker MUST NOT make the public site unavailable; stale-but-known-good data remains readable with freshness warnings.
+Retry the complete transaction for classified transient failures such as PostgreSQL `40001` serialization failures and `40P01` deadlocks. A unique violation is retryable only when the specific constraint is an intentional idempotency arbiter.
 
-## 11. Concurrency
+A connection loss during `COMMIT` is an **unknown outcome**. The worker MUST first reconcile the stable `reconciliation_operation_id`; it MUST NOT assume rollback and blindly create a new operation. PostgreSQL `pg_xact_status(xid8)` MAY supplement this recovery when the transaction XID is available.
 
-Single-VPS v1 does not require a distributed broker.
+Initial worker write transactions SHOULD use `SET LOCAL` timeouts as defined in IDEMPOTENCY_RECOVERY.md and calibrate them under load.
 
-The worker SHOULD use PostgreSQL advisory locks or lease rows to ensure one active fetch/derive operation per semantic endpoint/task.
+Source/HTTP retries remain bounded exponential backoff with jitter and preserve the same logical job identity.
 
-Multiple worker processes MAY be supported later, but correctness MUST not depend on only one process existing.
+## 11. Concurrency and stale completion
+
+Correctness MUST NOT depend on a single worker process.
+
+Use durable lease rows for work ownership and an `endpoint_cursors` row as the canonical serialization/fencing point for each semantic endpoint.
+
+The reconciliation transaction locks the endpoint cursor `FOR UPDATE` and verifies `lease_generation`.
+
+If a slow request completes after its lease expired and a newer generation owns the job:
+
+- retain safe immutable evidence;
+- classify the attempt `stale_fenced`;
+- do not roll canonical state backward;
+- do not emit normal current-state changes from that stale completion.
+
+Transaction-level advisory locks MAY be used for coarse resources without a natural row, such as sealing/version activation. Session-level advisory locks are not the durable worker-ownership mechanism.
 
 ## 12. Schema drift and forward compatibility
 
@@ -551,9 +551,9 @@ Manual actions are append-only and reversible. Merge/split/reassignment MUST enq
 
 ## 17.3 Transactional outbox and downstream work
 
-Chronicle v1 uses PostgreSQL transactional outbox/lease semantics rather than a separate broker.
+Chronicle v1 uses PostgreSQL transactional outbox semantics rather than a separate broker.
 
-When normalization/reconciliation commits a canonical mutation, required downstream jobs MUST commit in the same PostgreSQL transaction.
+When normalization/reconciliation commits a canonical mutation, every required downstream job MUST commit in the same PostgreSQL transaction.
 
 Typical jobs include:
 
@@ -563,9 +563,15 @@ Typical jobs include:
 - external raw-payload replication verification;
 - war sealing/export.
 
-Workers SHOULD claim jobs with row locking/leases such as `FOR UPDATE SKIP LOCKED`.
+Workers claim eligible rows in a **short** transaction using `FOR UPDATE SKIP LOCKED`, set a lease owner/expiry and increment `lease_generation`, then commit before executing the effect.
 
-Job handlers MUST be idempotent and tolerate at-least-once execution.
+Outbox delivery is **at-least-once**. If an effect succeeds and the worker crashes before marking the job complete, the same job may run again. Every handler therefore MUST have a deterministic dedup key, naturally idempotent target, conditional create or equivalent effect ledger.
+
+Completion MUST verify the same outbox lease generation so a stale worker cannot acknowledge work after lease steal.
+
+`LISTEN/NOTIFY` MAY be used only as a wake-up optimization; polling the durable table on startup and periodically remains required.
+
+Global ordering is not promised. Revision/input fingerprints make stale derived jobs no-op; any future strict per-scope ordering MUST be explicit rather than inferred from `created_at`.
 
 ## 18. War lifecycle handling
 
@@ -733,3 +739,11 @@ Before backend feature work depends on ingestion:
 38. Completed wars pass soft-close/sealing before a sealed archive revision is published.
 39. Sealing verifies referenced raw payloads and offsite replicas.
 40. A late correction creates a new archive revision rather than rewriting a sealed manifest.
+41. Logical job identity is stable across retries; request/capture timestamps are not idempotency keys.
+42. Lease generation fences a stale/expired worker from canonical current-state mutation.
+43. HTTP/CAS work is outside PostgreSQL transactions; reconciliation is a short explicit transaction.
+44. Unknown COMMIT outcome is reconciled by stable operation ID before any retry.
+45. Outbox claim transactions do not remain open while handlers execute.
+46. A crash after outbox effect success and before completion is safe under handler dedup/idempotency.
+47. LISTEN/NOTIFY is never the only durable work signal.
+48. Fault-injection tests cover kill -9, connection loss around COMMIT, ENOSPC, stale lease completion and PITR+CAS restore integrity.
