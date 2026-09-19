@@ -6,7 +6,8 @@ export const routing = defineRouting({
   localePrefix: "always",
   localeCookie: {
     name: "CHRONICLE_LOCALE",
-    sameSite: "lax"
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 365
   }
 });
 
