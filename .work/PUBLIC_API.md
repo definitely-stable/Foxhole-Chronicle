@@ -35,7 +35,7 @@ The API MUST:
 - `GET /api/v1/wars`
 - `GET /api/v1/wars/{war}`
 - `GET /api/v1/wars/{war}/timeline`
-- `GET /api/v1/wars/{war}/days/{day}`
+- `GET /api/v1/wars/{war}/days/{day}` — `{day}` is Chronicle 1-based elapsed war day
 - `GET /api/v1/wars/{war}/regions`
 - `GET /api/v1/wars/{war}/regions/{region}`
 - `GET /api/v1/wars/{war}/dna`
@@ -46,7 +46,7 @@ The API MUST:
 ### Compare
 
 - `GET /api/v1/compare?wars=...`
-- `GET /api/v1/compare/days?day=17&wars=...`
+- `GET /api/v1/compare/days?day=17&wars=...&partialMode=partial_as_is|like_for_like_fraction`
 
 ### Objectives
 
@@ -97,7 +97,9 @@ Analytical responses SHOULD include:
     "qualityClass": "high",
     "sources": ["official-war-api"],
     "metricVersions": {},
-    "modelVersions": {}
+    "modelVersions": {},
+    "timeSemanticsVersion": "elapsed-war-clock@1",
+    "warTimeRevision": 1
   }
 }
 ```
@@ -153,6 +155,61 @@ The API MUST NOT emit a fabricated exact `capturedAt` when the source only suppo
 
 If identity quality is insufficient for canonical history, the API SHOULD return an explicit unavailable/degraded state rather than silently merge ambiguous observations.
 
+## 4.2 Canonical war-time contract
+
+War/current/day responses SHOULD use explicit fields:
+
+```json
+{
+  "conquestStartAt": "2026-09-01T14:30:00Z",
+  "conquestEndAt": null,
+  "resistanceStartAt": null,
+  "scheduledConquestEndAt": null,
+  "dataAsOf": "2026-09-19T12:00:00Z",
+  "elapsedWarSeconds": 1531800,
+  "elapsedWarDay": 18,
+  "dayStartAt": "2026-09-18T14:30:00Z",
+  "dayEndExclusiveAt": "2026-09-19T14:30:00Z",
+  "dayStatus": "active_partial",
+  "daySpanFraction": 0.8958,
+  "coverageRatio": 0.98,
+  "timeSemanticsVersion": "elapsed-war-clock@1",
+  "warTimeRevision": 1
+}
+```
+
+Rules:
+
+- all serialized instants use ISO-8601 UTC;
+- `elapsedWarDay` is Chronicle's derived 1-based elapsed day;
+- `dayOfWarRaw` is source diagnostic data only and SHOULD NOT appear on ordinary analytical surfaces;
+- `daySpanFraction` describes the elapsed/existing portion of the 24-hour analytical day;
+- `coverageRatio` describes observed source-data coverage and is not the same quantity;
+- `dayEndExclusiveAt` is exclusive.
+
+Avoid ambiguous public fields such as `day`, `warDay`, `timestamp`, `lastUpdated`, or floating `elapsedDays` without a precise schema definition.
+
+### Day endpoint
+
+`GET /api/v1/wars/{war}/days/{day}` MUST identify:
+
+- requested elapsed day;
+- effective interval;
+- `dayStatus`;
+- `daySpanFraction`;
+- source coverage;
+- time semantics version;
+- war time revision;
+- boundary-ambiguous change/delta counts where applicable.
+
+A completed war ending exactly on a day boundary MUST NOT expose an empty following day.
+
+### Day comparison
+
+`partialMode=partial_as_is` returns the current partial interval and labels it partial.
+
+`partialMode=like_for_like_fraction` compares eligible historical wars only over the same elapsed fraction of Day N. Sources that lack sufficient time resolution are excluded rather than interpolated.
+
 ## 5. Errors
 
 Use ASP.NET Core ProblemDetails compatible with RFC 7807/9457 semantics.
@@ -187,6 +244,8 @@ Current-war responses SHOULD use shorter Cache-Control and ETags.
 The API SHOULD support `stale-while-revalidate` where behavior is appropriate.
 
 Algorithm-versioned resources MAY have very long cache lifetime if the URL/version fully identifies immutable semantics.
+
+War-relative historical cache keys MUST include or be invalidated by `warTimeRevision` when source time anchors are corrected.
 
 ## 8. Rate limiting
 
@@ -299,3 +358,7 @@ Readiness MUST consider database/API health; upstream War API outage alone SHOUL
 8. Objective History never serializes polling-bounded changes as exact event timestamps.
 9. Objective-derived responses expose identity resolution version and identity coverage.
 10. Old objective aliases remain resolvable after rename/merge.
+11. War-relative responses expose `timeSemanticsVersion` and `warTimeRevision`.
+12. Day endpoints use half-open elapsed-war intervals and never expose an empty day after an exact conquest-end boundary.
+13. Partial Day-vs-Day comparison mode is explicit.
+14. Boundary-ambiguous poll-derived changes are distinguishable from exact-single-bucket changes.
