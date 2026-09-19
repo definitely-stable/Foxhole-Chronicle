@@ -5,8 +5,6 @@ using Chronicle.Infrastructure.Persistence;
 using Chronicle.Infrastructure.Telemetry;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.OutputCaching;
-using NodaTime;
-using NodaTime.Serialization.SystemTextJson;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,11 +29,6 @@ builder.Services
     .AddCheck<PostgresReadinessHealthCheck>(
         "postgres",
         tags: ["ready"]);
-
-builder.Services.ConfigureHttpJsonOptions(options =>
-{
-    options.SerializerOptions.ConfigureForNodaTime(DateTimeZoneProviders.Tzdb);
-});
 
 var app = builder.Build();
 
@@ -71,8 +64,7 @@ applicationApi
                     ?.InformationalVersion
                 ?? "unknown";
 
-            var generatedAt =
-                Instant.FromDateTimeOffset(timeProvider.GetUtcNow());
+            var generatedAt = timeProvider.GetUtcNow();
 
             return TypedResults.Ok(
                 new AppStatusResponse(
