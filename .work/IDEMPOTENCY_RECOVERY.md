@@ -73,7 +73,7 @@ UUIDv7 is the default physical identifier for jobs/attempts/fetches because it i
 2. A committed PostgreSQL reference to external CAS requires the object to be durably published first.
 3. An orphan CAS object is acceptable; a committed DB reference to a missing CAS object is not.
 4. Every canonical mutation that requires downstream work commits the outbox rows in the same PostgreSQL transaction.
-5. A stale/expired lease holder MUST NOT mutate canonical current state after a newer lease generation has taken ownership.
+5. A stale/expired job lease holder or stale endpoint-fence holder MUST NOT mutate canonical current state after newer ownership has been established.
 6. Older/late evidence remains immutable evidence even when fenced from current-state mutation.
 7. A 304 creates validation/coverage evidence but no duplicate payload or normalized observation.
 8. Byte-identical 200 responses reuse payload identity.
@@ -121,9 +121,9 @@ Durable fields include:
 - last_error_class;
 - created_at/updated_at.
 
-Claiming a job increments lease_generation atomically. That generation is a fencing token.
+Claiming a job increments `lease_generation` atomically. That generation fences ownership of **that logical job only**.
 
-A worker may act on canonical state only while its generation is still current.
+It is not the canonical endpoint mutation fence. A worker may execute the job only while its job generation remains current, and it may mutate canonical endpoint state only while it also owns the current endpoint `fence_token`.
 
 ### 4.2 Attempt
 
@@ -177,28 +177,46 @@ Outside PostgreSQL transaction:
 
 The lease duration MUST exceed configured HTTP total timeout plus reconciliation margin. If the lease is renewed, renewal MUST require the same lease_generation.
 
-### Phase C — reconciliation transaction
+### Phase C — raw-capture transaction
+
+After the HTTP exchange is complete and any external CAS object is durably published, Chronicle crosses the raw-durable boundary in a short PostgreSQL transaction.
+
+The raw-capture transaction MUST:
+
+1. insert/reconcile `source_fetch` using its stable client-generated fetch ID;
+2. upsert `source_payload` metadata and exact inline bytes, or the already-durable external CAS reference, for a 200 response;
+3. set `representation_payload_id` for 200/304 as applicable;
+4. preserve the attempt's `job_lease_generation` and `endpoint_fence_token` as provenance;
+5. mark the attempt/raw checkpoint as `raw_durable`;
+6. commit.
+
+After this commit, a Worker crash MUST NOT erase the only Chronicle copy of a successfully received transient source response. A later stale fence may prevent canonical mutation, but it does not delete raw evidence.
+
+The raw-capture transaction MUST NOT mutate endpoint current state, emit observed changes or enqueue canonical-state downstream work.
+
+### Phase D — canonical reconciliation transaction
 
 Default isolation: READ COMMITTED.
 
 The transaction MUST be short and MUST:
 
 1. SET LOCAL lock_timeout, statement_timeout and transaction_timeout to worker-write limits;
-2. lock the endpoint cursor row FOR UPDATE;
-3. verify the attempt lease_generation is still current;
-4. insert/reconcile source_fetch using its stable fetch ID;
-5. upsert source_payload metadata/link when status is 200;
-6. link representation_payload_id;
+2. lock the `endpoint_poll_state` row FOR UPDATE;
+3. lock the endpoint cursor row FOR UPDATE;
+4. verify `attempt.job_lease_generation == ingestion_job.lease_generation`;
+5. verify `attempt.endpoint_fence_token == endpoint_poll_state.fence_token` and that the attempt is the current endpoint owner;
+6. load the already raw-durable fetch/payload/representation evidence;
 7. persist normalized observation only when required;
 8. apply anomaly/quarantine rules;
 9. apply canonical state mutation only if the evidence is current and accepted;
-10. increment endpoint canonical_revision when canonical state changes;
+10. increment endpoint `canonical_revision` when canonical state changes;
 11. persist coverage validation evidence;
 12. insert observed changes/state intervals as applicable;
 13. insert all required outbox jobs with deterministic dedup keys;
-14. record reconciliation_operation_id UNIQUE;
+14. record `reconciliation_operation_id UNIQUE` with both job generation and endpoint fence token;
 15. mark attempt/job final outcome;
-16. commit.
+16. release/advance endpoint scheduling state as required;
+17. commit.
 
 Heavy identity matching, aggregate rebuilds, model recomputation, offsite upload and export generation are outbox work unless they are both small and required to establish the immediate canonical invariant.
 
@@ -217,13 +235,29 @@ These are Chronicle operational defaults, not PostgreSQL guarantees. Production 
 
 ## 6. Concurrency and fencing
 
-### 6.1 Endpoint cursor
+### 6.1 Endpoint execution ownership
 
-A durable endpoint_cursors row serializes canonical current-state reconciliation per semantic endpoint.
+A durable `endpoint_poll_state` row owns scheduling/cache state and the endpoint-level execution fence for one semantic endpoint.
 
 Key:
 
 source + shard + endpoint_key + collection_profile_version.
+
+Fields include:
+
+- next_due_at;
+- cache_eligible_at;
+- ETag/cache state;
+- current owner attempt;
+- lease_until;
+- `fence_token bigint`;
+- failure/circuit state.
+
+Acquiring or stealing endpoint ownership is a short transaction that locks this row, verifies the prior lease is absent/expired or otherwise releasable, increments `fence_token`, records the new owner attempt and commits. Renewal requires the same owner and same fence token. A stale owner cannot renew, release or mutate endpoint current state.
+
+### 6.2 Endpoint cursor
+
+A durable `endpoint_cursors` row serializes accepted canonical state per semantic endpoint but does not own worker execution leases.
 
 Fields include:
 
@@ -233,15 +267,23 @@ Fields include:
 - accepted_source_version;
 - accepted_source_last_updated_at;
 - canonical_revision bigint;
-- lease_generation bigint;
 - last_validated_at;
 - last_changed_at.
 
-The reconciliation transaction locks this row FOR UPDATE.
+The reconciliation transaction locks both `endpoint_poll_state` and `endpoint_cursors` in that documented order.
 
-### 6.2 Stale completion rule
+Job generation and endpoint fence token are deliberately independent:
 
-If attempt.generation != current job/cursor generation:
+`job lease generation != endpoint canonical mutation fence`.
+
+### 6.3 Stale completion rule
+
+If either:
+
+- `attempt.job_lease_generation != current ingestion_job.lease_generation`; or
+- `attempt.endpoint_fence_token != current endpoint_poll_state.fence_token` / current owner attempt;
+
+then:
 
 - persist/reconcile immutable fetch/payload evidence when safe;
 - set attempt outcome stale_fenced;
@@ -251,13 +293,13 @@ If attempt.generation != current job/cursor generation:
 
 This protects against a slow request completing after its lease expired and a newer owner completed.
 
-### 6.3 Source revision regression
+### 6.4 Source revision regression
 
 A current lease does not override source anomaly rules.
 
 A map source version regression or equivalent source-order anomaly is retained as evidence and quarantined; it does not automatically roll canonical state backward.
 
-### 6.4 Locks
+### 6.5 Locks
 
 Use row locks for resources already represented by durable rows: ingestion jobs, endpoint cursors, outbox jobs.
 
@@ -289,7 +331,7 @@ A network failure while COMMIT is in progress can leave the client unable to kno
 
 Chronicle protocol:
 
-1. every reconciliation transaction has a client-known reconciliation_operation_id;
+1. every raw-capture transaction uses stable client-generated fetch/payload identities, and every canonical reconciliation transaction has a client-known `reconciliation_operation_id`;
 2. before COMMIT, the worker MAY read pg_current_xact_id() and keep xid8 in attempt telemetry;
 3. if CommitAsync throws because the connection is lost, classify commit_outcome_unknown;
 4. reconnect;
@@ -302,6 +344,8 @@ Chronicle protocol:
 11. if pg_xact_status returns NULL/unknown, operation-ID reconciliation remains authoritative: retry the same operation through unique constraints and endpoint fencing, never create a new logical operation.
 
 The process MUST NOT assume that a CommitAsync exception means rollback.
+
+Unknown COMMIT on the raw-capture transaction is reconciled first by the stable `source_fetch.id` and payload uniqueness. Unknown COMMIT on canonical reconciliation is reconciled by `reconciliation_operation_id`. Neither path creates a new logical identity merely because the client lost the connection.
 
 EF Core execution strategies MUST NOT blindly rerun a transaction delegate that can create a second logical operation. Client-generated keys and deterministic operation IDs are mandatory for retryable write delegates.
 
@@ -543,6 +587,7 @@ Required durable relations:
 - source_fetches;
 - source_payloads;
 - payload_replicas;
+- endpoint_poll_state;
 - endpoint_cursors;
 - reconciliation_operations;
 - outbox_jobs;
@@ -554,6 +599,7 @@ Key constraints:
 
 - ingestion_jobs.job_key UNIQUE;
 - source_payloads(source_id, content_hash) UNIQUE;
+- endpoint_poll_state semantic endpoint key UNIQUE;
 - endpoint_cursors semantic endpoint key UNIQUE;
 - reconciliation_operations.operation_id UNIQUE;
 - outbox_jobs(kind, dedup_key) UNIQUE;
