@@ -197,13 +197,15 @@ Fields:
 - `normalized_family text NULL`
 - `created_at timestamptz NOT NULL`
 
-`source_array_ordinal` is retained only as forensic source evidence. It MUST NOT be used for matching.
+`source_array_ordinal` is retained as **payload-local occurrence evidence**. It MUST NOT be used for matching across observations or as canonical objective identity.
 
 Recommended uniqueness:
 
-`(map_observation_id, raw_item_hash, evidence_reason)`
+`(map_observation_id, source_item_kind, source_array_ordinal, evidence_reason)`
 
-The raw item hash is an observation-local fingerprint, not a durable objective ID.
+If the upstream representation does not expose a usable ordinal, the parser MUST assign an equivalent deterministic payload-local occurrence discriminator. This preserves multiplicity when two occurrences have identical field content and therefore the same `raw_item_hash`.
+
+The raw item hash is an observation-local content fingerprint, not a durable objective ID. Source occurrence identity and canonical objective identity are separate concepts.
 
 An unchanged item in a later valid snapshot does not require another relational row. Continued-state evidence comes from the accepted map representation and its validation/coverage chain.
 ### 3.5 identity_match_runs
