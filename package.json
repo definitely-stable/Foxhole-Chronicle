@@ -1,0 +1,19 @@
+{
+  "name": "foxhole-chronicle",
+  "private": true,
+  "packageManager": "npm@11.19.0",
+  "engines": {
+    "node": ">=24.21.0 <25"
+  },
+  "scripts": {
+    "bootstrap": "dotnet restore FoxholeChronicle.slnx && npm --prefix apps/web install",
+    "build:dotnet": "dotnet build FoxholeChronicle.slnx --no-restore",
+    "generate:api": "npm --prefix apps/web run api:generate",
+    "build:web": "npm --prefix apps/web run build",
+    "build": "npm run build:dotnet && npm run generate:api && npm run build:web",
+    "test:dotnet": "dotnet test FoxholeChronicle.slnx --no-build --no-restore",
+    "test:web": "npm --prefix apps/web run test",
+    "test": "npm run test:dotnet && npm run test:web",
+    "verify": "npm run build && npm run test"
+  }
+}
