@@ -67,6 +67,7 @@ Working baseline, pending final version verification from official project docum
 - Next.js 16.x
 - React 19.x
 - TypeScript
+- next-intl for UI localization / locale routing
 - supported Node.js LTS
 - Tailwind CSS 4.x
 - Radix UI primitives
@@ -130,8 +131,9 @@ Avoid repository/UoW/mediator abstractions that add no domain value.
 Owns:
 
 - routing and presentation;
+- locale-prefixed routing, locale negotiation and localized presentation;
 - SSR/RSC;
-- SEO and OpenGraph;
+- SEO, hreflang and OpenGraph;
 - chart composition;
 - responsive UX;
 - static/historical rendering strategy;
@@ -148,7 +150,7 @@ Does not own:
 
 Owns:
 
-- public REST contract;
+- locale-neutral public REST contract;
 - analytical query application services;
 - source/coverage/freshness metadata;
 - output caching;
@@ -216,7 +218,7 @@ Key rules:
 6. Historical sources may have lower resolution and MUST be labeled accordingly.
 7. Collection resolution is distinct from UI/aggregation resolution; `chronicle-collection-v1` collects war at 5m and warReport/dynamic map state at 15m.
 
-Official source semantics are fixed in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Canonical war-relative clock/bucket semantics are fixed in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md). Domain/storage rules are in [DATA_MODEL.md](./DATA_MODEL.md), [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md), and [METRICS.md](./METRICS.md).
+Official source semantics are fixed in [WAR_API_SEMANTICS.md](./WAR_API_SEMANTICS.md). Canonical war-relative clock/bucket semantics are fixed in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md). UI localization, locale routing and language-selection semantics are fixed in [LOCALIZATION.md](./LOCALIZATION.md). Domain/storage rules are in [DATA_MODEL.md](./DATA_MODEL.md), [OBJECTIVE_IDENTITY.md](./OBJECTIVE_IDENTITY.md), and [METRICS.md](./METRICS.md).
 
 ## 7. Current and historical data
 
