@@ -65,11 +65,29 @@ Accepted baseline:
 - 30 active maps/shard for initial capacity planning;
 - 6,072 scheduled regular requests/day/shard at that baseline;
 - fixed cadence/no hot mode in v1;
-- replay-critical unique raw payloads retained in compressed content-addressed storage;
+- replay-critical exact raw payloads retained through a hybrid payload abstraction: small payloads may be inline PostgreSQL bytes, larger payloads use Zstd-compressed CAS;
 - PostgreSQL stores sparse semantic/item history rather than every unchanged item occurrence;
 - 15m -> 30m -> 60m downsampling analysis is required before relaxing cadence.
 
 Precise GB/year is intentionally not treated as known until real payload, compression, semantic-change and relation/index growth are measured.
+### Data lifecycle, archival and recovery
+
+The September 2026 lifecycle review is materialized in [DATA_LIFECYCLE.md](./DATA_LIFECYCLE.md) and [adr/data-lifecycle-and-recovery.md](./adr/data-lifecycle-and-recovery.md).
+
+Resolved baseline:
+
+- payload content identity is SHA-256 of exact original response bytes before compression;
+- small payloads may be inline in PostgreSQL; large dynamic/static payloads use Zstd CAS;
+- external CAS is made durable before PostgreSQL commits a reference;
+- PostgreSQL transactional outbox replaces a separate broker in v1;
+- ordinary high-resolution warReport/dynamic analytics are 15m, not synthetic 5m;
+- completed wars pass active -> soft_closed -> sealing -> sealed;
+- sealed manifests are revisioned; late corrections create a new archive revision;
+- Parquet/Zstd is a sealed analytical projection, not source truth;
+- PostgreSQL DR uses physical backup + continuous WAL/PITR, with pgBackRest as the preferred manager;
+- raw replay evidence is replicated to an independent offsite failure domain;
+- recovery is incomplete if PostgreSQL references missing external replay payloads;
+- no table partitioning, custom packfiles or large-data platform components without measured evidence.
 ### Objective identity
 
 Chronicle-owned objective identity is now an accepted requirement because the official map-item schema has no stable objective ID. Coordinate tolerance and cross-war matching still require calibration against a real payload corpus before being treated as collision-free.
