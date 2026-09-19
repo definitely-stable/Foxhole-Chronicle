@@ -204,6 +204,19 @@ Received 200-response evidence crosses the raw-durable boundary before canonical
 
 Unknown COMMIT outcomes are reconciled by stable fetch identity or deterministic reconciliation operation_key rather than blindly replayed as new operations.
 
+### Implementation bootstrap
+
+The repository now contains the executable bootstrap:
+
+- `FoxholeChronicle.slnx` with Chronicle.Api/Core/Infrastructure/Worker;
+- `apps/web` Next.js application with all five launch locales;
+- build-time `/api/app` OpenAPI generation feeding openapi-typescript;
+- PostgreSQL 18 local Compose bootstrap with pg_stat_statements + btree_gist;
+- OpenTelemetry server instrumentation;
+- xUnit v3/Microsoft Testing Platform, Vitest and Playwright smoke boundaries.
+
+The bootstrap intentionally contains no Chronicle domain migration and no active War API ingestion loop. Those begin with the first vertical slice after bootstrap.
+
 ### Platform baseline
 
 The implementation baseline now includes:

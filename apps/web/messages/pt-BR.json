@@ -1,0 +1,42 @@
+{
+  "Navigation": {
+    "currentWar": "Guerra atual",
+    "wars": "Guerras",
+    "regions": "Regiões",
+    "archive": "Arquivo",
+    "label": "Navegação principal"
+  },
+  "Home": {
+    "eyebrow": "Observatório estratégico de dados",
+    "tagline": "World Conquest, lembrada e medida.",
+    "currentWar": "Guerra atual",
+    "bootstrapTitle": "Base de implementação",
+    "bootstrapBody": "A estrutura de execução está pronta. A próxima fatia vertical cobre a guerra atual e a linha do tempo histórica."
+  },
+  "CurrentWar": {
+    "eyebrow": "Guerra atual",
+    "title": "Guerra atual",
+    "shard": "Shard",
+    "state": "Estado",
+    "bootstrap": "Bootstrap",
+    "body": "Esta é a rota canônica, consciente do shard, para a World Conquest ativa."
+  },
+  "Timeline": {
+    "eyebrow": "Linha do tempo da guerra",
+    "title": "War Timeline",
+    "placeholderLabel": "Superfície inicial da linha do tempo",
+    "placeholder": "A linha do tempo histórica composta será exibida aqui."
+  },
+  "Replay": {
+    "eyebrow": "Replay da guerra",
+    "title": "War Replay",
+    "placeholderLabel": "Superfície inicial do replay",
+    "placeholder": "O replay histórico baseado em observações será exibido aqui."
+  },
+  "Support": {
+    "wars": "Guerras",
+    "regions": "Regiões",
+    "archive": "Arquivo",
+    "bootstrap": "Esta superfície P0 de apoio está preparada e será implementada após o caminho principal de dados."
+  }
+}

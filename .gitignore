@@ -1,0 +1,35 @@
+# .NET
+**/bin/
+**/obj/
+TestResults/
+*.user
+*.suo
+
+# OpenAPI/build artifacts
+artifacts/
+
+# Node / Next.js
+node_modules/
+apps/web/.next/
+apps/web/next-env.d.ts
+apps/web/out/
+apps/web/coverage/
+apps/web/playwright-report/
+apps/web/test-results/
+
+# Local environment
+.env
+.env.local
+.env.*.local
+!.env.example
+!apps/web/.env.example
+
+# Local PostgreSQL/raw data
+.data/
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

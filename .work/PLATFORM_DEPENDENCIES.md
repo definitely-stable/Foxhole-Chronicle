@@ -24,11 +24,33 @@ A dependency MUST NOT be added merely because it is popular.
 
 ## 2. Web baseline
 
+### 2.0 Bootstrap pins
+
+The implementation bootstrap pins the following compatible versions:
+
+- Node.js 24.21+ LTS;
+- npm 11.19.1;
+- Next.js 16.3.5;
+- React / React DOM 19.3.0;
+- TypeScript 5.9.3;
+- next-intl 4.14.2;
+- @formatjs/intl-localematcher 0.9.0;
+- nuqs 2.10.1;
+- openapi-typescript 7.13.0;
+- openapi-fetch 0.17.0;
+- Zod 4.6.5;
+- ECharts 6.1.0;
+- Tailwind CSS / @tailwindcss/postcss 4.3.3;
+- @vercel/otel 2.1.3.
+
+TypeScript 5.9.3 is deliberately pinned for the September 2026 bootstrap. Current `openapi-typescript@7.13.0` declares a `typescript@^5.x` peer contract, while TypeScript 7's Go-based package also changes the compiler-API model used by existing tooling. Do not bypass this with `--force` or `legacy-peer-deps`; revisit the compiler line when the full Next.js + OpenAPI toolchain supports it.
+
 ### 2.1 Adopt for v1
 
 Runtime:
 
 - next-intl — localization and locale routing;
+- @formatjs/intl-localematcher — Accept-Language best-fit matching behind Chronicle's Traditional-Chinese guard;
 - openapi-fetch — typed HTTP client over generated OpenAPI types;
 - nuqs 2.x — typed URL query-state for analytical/shareable view state;
 - zod 4.x — narrow runtime validation at untyped web boundaries;
@@ -37,7 +59,7 @@ Runtime:
 Build/development:
 
 - openapi-typescript 7.x — generate TypeScript types from OpenAPI 3.1;
-- TypeScript compiler with noUncheckedIndexedAccess enabled.
+- TypeScript 5.9.x compiler with noUncheckedIndexedAccess enabled while the approved OpenAPI generator requires TypeScript ^5.x.
 
 Testing:
 
@@ -88,6 +110,26 @@ ASP.NET OpenAPI 3.1
 ~~~
 
 ## 3. .NET and PostgreSQL data access
+
+### 3.0 Bootstrap pins
+
+The implementation bootstrap pins:
+
+- .NET SDK 10.0.112 with `rollForward=latestFeature` inside the .NET 10 line;
+- ASP.NET Core / Microsoft packages 10.0.12 where versioned separately;
+- EF Core 10.0.12;
+- Npgsql 10.0.3;
+- Npgsql.EntityFrameworkCore.PostgreSQL 10.0.3;
+- Npgsql.EntityFrameworkCore.PostgreSQL.NodaTime 10.0.2;
+- NodaTime 3.3.4;
+- OpenTelemetry .NET 1.19.0;
+- xUnit.net v3 4.0.1 on Microsoft Testing Platform v2;
+- Testcontainers.PostgreSql 4.15.0;
+- PostgreSQL Docker 18.6-bookworm.
+
+PostgreSQL 18+ Docker volumes MUST be mounted at `/var/lib/postgresql`; the image owns the version-specific PGDATA subdirectory.
+
+Patch pins may be deliberately upgraded in focused dependency maintenance changes after compatibility verification.
 
 ### 3.1 Adopt EF Core 10 + Npgsql 10 hybrid
 

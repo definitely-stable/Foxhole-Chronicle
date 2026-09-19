@@ -1,0 +1,42 @@
+{
+  "Navigation": {
+    "currentWar": "Current War",
+    "wars": "Wars",
+    "regions": "Regions",
+    "archive": "Archive",
+    "label": "Primary navigation"
+  },
+  "Home": {
+    "eyebrow": "Strategic data observatory",
+    "tagline": "World Conquest, remembered and measured.",
+    "currentWar": "Current War",
+    "bootstrapTitle": "Implementation bootstrap",
+    "bootstrapBody": "The runtime shell is ready. Live war ingestion and the historical Timeline are the next vertical slice."
+  },
+  "CurrentWar": {
+    "eyebrow": "Current War",
+    "title": "Current War",
+    "shard": "Shard",
+    "state": "State",
+    "bootstrap": "Bootstrap",
+    "body": "This route is the canonical shard-aware home for the active World Conquest."
+  },
+  "Timeline": {
+    "eyebrow": "War Timeline",
+    "title": "War Timeline",
+    "placeholderLabel": "Timeline bootstrap surface",
+    "placeholder": "Composite historical Timeline will render here."
+  },
+  "Replay": {
+    "eyebrow": "War Replay",
+    "title": "War Replay",
+    "placeholderLabel": "Replay bootstrap surface",
+    "placeholder": "Observed historical map replay will render here."
+  },
+  "Support": {
+    "wars": "Wars",
+    "regions": "Regions",
+    "archive": "Archive",
+    "bootstrap": "This supporting P0 surface is scaffolded and will be implemented after the core data path."
+  }
+}

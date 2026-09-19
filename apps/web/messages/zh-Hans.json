@@ -1,0 +1,42 @@
+{
+  "Navigation": {
+    "currentWar": "当前战争",
+    "wars": "战争",
+    "regions": "地区",
+    "archive": "档案",
+    "label": "主导航"
+  },
+  "Home": {
+    "eyebrow": "战略数据观测站",
+    "tagline": "记录并量化 World Conquest 的历史。",
+    "currentWar": "当前战争",
+    "bootstrapTitle": "实现引导",
+    "bootstrapBody": "运行时框架已就绪。下一步是当前战争采集与历史时间线。"
+  },
+  "CurrentWar": {
+    "eyebrow": "当前战争",
+    "title": "当前战争",
+    "shard": "分片",
+    "state": "状态",
+    "bootstrap": "引导阶段",
+    "body": "这是当前 World Conquest 的规范化分片感知入口。"
+  },
+  "Timeline": {
+    "eyebrow": "战争时间线",
+    "title": "War Timeline",
+    "placeholderLabel": "时间线引导界面",
+    "placeholder": "复合历史时间线将在此呈现。"
+  },
+  "Replay": {
+    "eyebrow": "战争回放",
+    "title": "War Replay",
+    "placeholderLabel": "回放引导界面",
+    "placeholder": "基于观测证据的历史地图回放将在此呈现。"
+  },
+  "Support": {
+    "wars": "战争",
+    "regions": "地区",
+    "archive": "档案",
+    "bootstrap": "该 P0 辅助界面已搭建，将在核心数据链路之后实现。"
+  }
+}

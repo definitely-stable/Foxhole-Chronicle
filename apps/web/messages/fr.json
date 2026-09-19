@@ -1,0 +1,42 @@
+{
+  "Navigation": {
+    "currentWar": "Guerre actuelle",
+    "wars": "Guerres",
+    "regions": "Régions",
+    "archive": "Archives",
+    "label": "Navigation principale"
+  },
+  "Home": {
+    "eyebrow": "Observatoire stratégique des données",
+    "tagline": "World Conquest, mémorisée et mesurée.",
+    "currentWar": "Guerre actuelle",
+    "bootstrapTitle": "Socle d’implémentation",
+    "bootstrapBody": "Le socle d’exécution est prêt. La prochaine tranche verticale couvre la guerre actuelle et la chronologie historique."
+  },
+  "CurrentWar": {
+    "eyebrow": "Guerre actuelle",
+    "title": "Guerre actuelle",
+    "shard": "Shard",
+    "state": "État",
+    "bootstrap": "Bootstrap",
+    "body": "Cette route est l’entrée canonique, consciente du shard, pour la World Conquest active."
+  },
+  "Timeline": {
+    "eyebrow": "Chronologie de guerre",
+    "title": "War Timeline",
+    "placeholderLabel": "Surface initiale de chronologie",
+    "placeholder": "La chronologie historique composite sera affichée ici."
+  },
+  "Replay": {
+    "eyebrow": "Replay de guerre",
+    "title": "War Replay",
+    "placeholderLabel": "Surface initiale du replay",
+    "placeholder": "Le replay historique fondé sur les observations sera affiché ici."
+  },
+  "Support": {
+    "wars": "Guerres",
+    "regions": "Régions",
+    "archive": "Archives",
+    "bootstrap": "Cette surface P0 d’appui est créée et sera implémentée après le chemin de données principal."
+  }
+}

@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="src/Chronicle.Core/Chronicle.Core.csproj" />
+  <Project Path="src/Chronicle.Infrastructure/Chronicle.Infrastructure.csproj" />
+  <Project Path="src/Chronicle.Api/Chronicle.Api.csproj" />
+  <Project Path="src/Chronicle.Worker/Chronicle.Worker.csproj" />
+  <Project Path="tests/Chronicle.UnitTests/Chronicle.UnitTests.csproj" />
+  <Project Path="tests/Chronicle.IntegrationTests/Chronicle.IntegrationTests.csproj" />
+  <Project Path="tests/Chronicle.ContractTests/Chronicle.ContractTests.csproj" />
+</Solution>

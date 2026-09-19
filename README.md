@@ -26,6 +26,32 @@ Baseline:
 
 The architecture is a modular monolith with a separate ingestion worker.
 
+## Implementation bootstrap
+
+Prerequisites:
+
+- .NET SDK 10.0.112 or compatible newer 10.0 feature band allowed by `global.json`;
+- Node.js 24.21+ LTS with npm 11;
+- Docker Compose for local PostgreSQL.
+
+From repository root:
+
+~~~bash
+npm run bootstrap
+docker compose up -d postgres
+npm run verify
+~~~
+
+Development processes:
+
+~~~bash
+dotnet run --project src/Chronicle.Api
+dotnet run --project src/Chronicle.Worker
+npm --prefix apps/web run dev
+~~~
+
+Bootstrap currently provides the runnable process/toolchain skeleton, locale routing, health/status endpoints, OpenAPI generation and smoke-test boundaries. It intentionally does **not** yet implement War API ingestion or the first Chronicle domain migration.
+
 ## Documentation
 
 Agent/contributor execution rules are in [AGENTS.md](./AGENTS.md).
