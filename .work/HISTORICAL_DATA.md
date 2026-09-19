@@ -2,7 +2,7 @@
 
 Status: **Authoritative working specification**
 
-Chronicle must support historical analysis without pretending that every historical war has Chronicle-native high-frequency data.
+Chronicle must support historical analysis without pretending that every historical war has Chronicle-native high-frequency data or Chronicle-compatible day boundaries. Time alignment follows [TIME_SEMANTICS.md](./TIME_SEMANTICS.md).
 
 ## 1. Source hierarchy
 
@@ -71,6 +71,32 @@ Must not be used for phase/swing/objective-history claims.
 
 Visible as source metadata only; excluded from derived analytics requiring stronger coverage.
 
+## 2.1 Historical time alignment
+
+Every imported historical dataset MUST declare a `time_alignment_class`.
+
+Recommended classes:
+
+- `chronicle_exact` — source timestamps permit exact rebucketing relative to canonical conquest start;
+- `source_day_exact_origin` — source daily buckets have a known origin equivalent to Chronicle elapsed-day boundaries;
+- `source_day_known_different_origin` — bucket origin is known but differs from Chronicle elapsed days;
+- `source_day_unknown_origin` — source exposes a day index/aggregate but exact bucket boundaries are unknown;
+- `final_aggregate_only`.
+
+Historical import staging SHOULD preserve:
+
+- raw source day index;
+- source bucket start/end if known;
+- source timezone/basis if known;
+- Chronicle war-time revision used for alignment;
+- time semantics version.
+
+Only `chronicle_exact` and `source_day_exact_origin` may participate in exact Day-N-vs-Day-N metrics without a distinct source-specific model.
+
+Known-different-origin data MUST NOT be silently shifted into Chronicle elapsed-day buckets.
+
+Unknown-origin daily aggregates MUST NOT be given synthetic intra-day precision.
+
 ## 3. Coverage UX
 
 Every page/API that mixes historical tiers MUST expose:
@@ -98,6 +124,8 @@ Every import batch requires an immutable manifest:
 - licensing-policy version;
 - source schema description;
 - coverage tier;
+- time alignment class;
+- source bucket origin/time basis when known;
 - row counts;
 - warnings;
 - known gaps.
@@ -165,7 +193,7 @@ Feature availability is data-driven.
 
 - **War DNA**: partial dimensions allowed; unavailable dimensions clearly shown.
 - **Similar Wars**: requires minimum shared feature coverage.
-- **Day vs Day**: daily or better data.
+- **Day vs Day**: daily or better data **and compatible time alignment**. Partial like-for-like fraction mode requires timestamped/time-series resolution; daily-only aggregates are not sufficient.
 - **War Phases**: Tier A/B only unless a separately validated daily-resolution model exists.
 - **Swing Analysis**: primarily Tier A; lower-resolution results require a distinct model/version.
 - **Objective History**: only where objective-level history exists.
@@ -174,4 +202,4 @@ Feature availability is data-driven.
 
 ## 11. Non-negotiable rule
 
-Chronicle MUST prefer an honest "insufficient historical resolution" state over synthesizing a visually complete but unsupported timeline.
+Chronicle MUST prefer an honest "insufficient historical resolution/time alignment" state over synthesizing a visually complete but unsupported timeline.
