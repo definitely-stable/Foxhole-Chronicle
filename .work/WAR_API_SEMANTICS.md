@@ -76,6 +76,8 @@ Victory-town logic: the official docs state that `requiredVictoryTowns` is a sta
 
 `conquestStartTime`, `conquestEndTime`, `resistanceStartTime`, and `scheduledConquestEndTime` are documented as Unix timestamps. Official examples are 13-digit values. Map-data `lastUpdated` is explicitly documented as **milliseconds from Unix epoch**.
 
+The official README does not separately spell out a unit sentence for the war timestamps, so Chronicle treats millisecond interpretation as a validated source-contract interpretation based on the current official examples/behavior and preserves the raw integers.
+
 **DESIGN DECISION:** source DTOs MUST initially deserialize source timestamps as nullable `long`, preserve the raw integer, validate the expected millisecond range, and only then convert with millisecond Unix semantics. A value outside a plausible millisecond range MUST be quarantined rather than silently interpreted as seconds.
 
 ### 4.2 `lastUpdated`
@@ -93,15 +95,21 @@ Therefore `lastUpdated` is source-state metadata, not an exact event timestamp.
 
 Historical official-repository issue #81 reported per-map reset/desynchronization of this field and was later marked fixed. That issue is historical evidence for defensive validation, not proof of a current defect.
 
-**DESIGN DECISION:** Chronicle keeps `dayOfWar` as `day_of_war_raw` only. Day-vs-Day and Daily Chronicle use:
+**DESIGN DECISION:** Chronicle keeps `dayOfWar` as `day_of_war_raw` only.
 
-`elapsed_war_day = floor((t - conquestStartTime) / 86400s) + 1`
+Chronicle analytical time is defined in [TIME_SEMANTICS.md](./TIME_SEMANTICS.md):
 
-with day N defined as:
+`elapsed_war_day(t) = floor((t - conquestStartTime) / 86400s) + 1`
+
+for instants inside the conquest interval, with Day N:
 
 `[conquestStartTime + (N-1)*24h, conquestStartTime + N*24h)`
 
-The first and last analytical days may be partial. Maintenance does not stop this elapsed clock.
+Important boundary rule: if `conquestEndTime` equals a day boundary exactly, that end instant is outside the half-open conquest interval and does **not** create an empty next day.
+
+The active current day or final day may be partial. Maintenance/API/collector downtime does not stop the elapsed clock; it reduces data coverage instead.
+
+The official documentation does not state that `dayOfWar` changes at UTC/server midnight, so Chronicle MUST NOT encode that assumption.
 
 ## 5. War report semantics
 
@@ -532,6 +540,7 @@ The following are now resolved enough for implementation:
 - map timestamps: `lastUpdated` is map-state update metadata, not event time;
 - objective ID: no documented stable upstream item ID;
 - event timing: polling-bounded ObservedChange;
+- elapsed-war clock: continuous 24-hour UTC/POSIX intervals anchored to validated conquest start, independent of raw `dayOfWar`;
 - ETag: required optimization/conditional validator, not durable identity;
 - shard keying: mandatory;
 - enlistments: region-scoped and non-summable as global unique population;
@@ -545,7 +554,8 @@ Still intentionally unresolved and MUST remain conservative:
 - global uniqueness scope of `warId` across shards;
 - coordinate origin/orientation as an official guarantee;
 - calibrated family-specific coordinate/matcher thresholds and ambiguity margins;
-- exact numeric HTTP cache lifetimes/rate limits beyond returned headers and documented "may update" cadence.
+- exact numeric HTTP cache lifetimes/rate limits beyond returned headers and documented "may update" cadence;
+- exact undocumented internal rule used by the source to compute `dayOfWar`.
 
 ## 21. Licensing note
 
